@@ -28,10 +28,29 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Where the script writes per-trace verdict JSON + HTML reports.
+# Overridable via PROVENEX_REPORTS_DIR=... if you want a different path.
+REPORTS_DIR="${PROVENEX_REPORTS_DIR:-$SCRIPT_DIR/reports}"
+mkdir -p "$REPORTS_DIR"
+
+# Pass --no-report on the command line to skip HTML rendering entirely.
+# Otherwise render-verdict.py (sitting alongside this script) is invoked
+# on every successful response. The renderer is plain Python 3 (stdlib
+# only), so there is nothing to install.
+RENDER_HTML=1
+for arg in "$@"; do
+  case "$arg" in
+    --no-report) RENDER_HTML=0 ;;
+  esac
+done
+
 post() {
   local fixture="$1"
   local description="$2"
   local expected="$3"
+  local stem="${fixture%.otlp.json}"
+  local response_json="$REPORTS_DIR/${stem}.json"
+  local report_html="$REPORTS_DIR/${stem}.html"
 
   printf "\n──────────────────────────────────────────────────────\n"
   printf "  %s\n" "$description"
@@ -42,10 +61,13 @@ post() {
     -H "Authorization: Bearer $KEY" \
     -H "Content-Type: application/json" \
     --data-binary "@$SCRIPT_DIR/$fixture" \
-    | python3 -c "
+    -o "$response_json"
+
+  python3 -c "
 import sys, json
 try:
-    d = json.load(sys.stdin)
+    with open('$response_json') as f:
+        d = json.load(f)
 except Exception as e:
     print(f'  bad response: {e}')
     sys.exit()
@@ -56,11 +78,17 @@ print(f'  red verdicts fired:      {red}')
 for v in d.get('verdicts', []):
     binding = v.get('binding_reason') or '(no binding)'
     risk = v.get('risk') or '?'
-    explanation = (v.get('explanation') or '').split('—')[0].strip()[:90]
-    print(f'    • {binding} / {risk}')
+    explanation = (v.get('explanation') or '').split(';')[0].strip()[:90]
+    print(f'    - {binding} / {risk}')
     if explanation:
         print(f'      {explanation}')
 "
+
+  if [ "$RENDER_HTML" = "1" ] && [ -f "$response_json" ]; then
+    python3 "$SCRIPT_DIR/render-verdict.py" \
+      "$response_json" "$report_html" 2>&1 \
+      | sed 's/^/  /'
+  fi
 }
 
 cat <<'BANNER'
@@ -127,13 +155,17 @@ post "12_delayed_exfil_day2_egress.otlp.json" \
   "Red, high-risk-resource-egress / high; cross-batch lineage walks back to the Day 0 write; the patient-attacker shape no UEBA can see"
 
 printf "\n──────────────────────────────────────────────────────\n"
-printf "  Verdicts persisted to your audit log.\n"
-printf "  Retrieve them at any time with:\n\n"
+printf "  Done. Verdicts persisted to your audit log.\n\n"
+if [ "$RENDER_HTML" = "1" ]; then
+  printf "  HTML reports + raw JSON written to:\n"
+  printf "    %s/\n\n" "$REPORTS_DIR"
+  printf "  Open any one in your browser, e.g.:\n"
+  printf "    open %s/01_echoleak_breach.html   # macOS\n" "$REPORTS_DIR"
+  printf "    xdg-open %s/01_echoleak_breach.html   # linux\n\n" "$REPORTS_DIR"
+fi
+printf "  Retrieve the full audit log at any time:\n\n"
 printf "    curl -H \"Authorization: Bearer \$PROVENEX_API_KEY\" \\\\\n"
 printf "      $URL/v1/verdicts?limit=20 | python3 -m json.tool\n\n"
-printf "  Render any verdict as a single-file HTML report:\n\n"
-printf "    provenex-ingest send 01_echoleak_breach.otlp.json \\\\\n"
-printf "      --api-key \$PROVENEX_API_KEY --report verdict.html\n\n"
 printf "  Trial expires 30 days from your signup.\n"
 printf "  Onboarding doc: https://signup.provenex.ai/docs/onboarding\n"
 printf "  Questions / feedback: skulk@provenex.ai\n"
