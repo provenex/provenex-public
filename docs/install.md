@@ -1,10 +1,10 @@
 # Installing `provenex-ingest`
 
-The open-source customer-side ingestor. Source is public and auditable; the binary you install is built from that source. **We never email binaries** — every install path below pulls from a verifiable source.
+The open-source customer-side ingestor. Source is public and auditable; the binary you install is built from that source. **We never email binaries**. every install path below pulls from a verifiable source.
 
 Three install methods, pick whichever your stack prefers.
 
-## Path 1 — Cargo (Rust toolchain)
+## Path 1. Cargo (Rust toolchain)
 
 ```bash
 cargo install --git https://github.com/provenex/provenex-ingest provenex-ingest
@@ -15,13 +15,13 @@ That downloads the source, compiles it locally, drops the binary at `~/.cargo/bi
 ```bash
 git clone https://github.com/provenex/provenex-ingest.git
 cd provenex-ingest
-# audit the source here — it's ~600 lines of Rust
+# audit the source here: it's ~600 lines of Rust
 cargo install --path . --bin provenex-ingest
 ```
 
 **Requires:** Rust 1.86+ (any recent stable). Install via [rustup](https://rustup.rs) if you don't have it.
 
-## Path 2 — Docker
+## Path 2. Docker
 
 ```bash
 docker pull ghcr.io/provenex/provenex-ingest:latest
@@ -47,7 +47,7 @@ docker run -d --name provenex-ingest \
   listen
 ```
 
-## Path 3 — One-line shell installer
+## Path 3. One-line shell installer
 
 For developers who'd rather not install Rust or Docker. The installer detects your OS+architecture (darwin x86/arm, linux x86/arm) and downloads the matching prebuilt binary from the [Releases page](https://github.com/provenex/provenex-ingest/releases):
 
@@ -62,7 +62,7 @@ The script:
 4. Extracts the binary to `~/.local/bin/provenex-ingest` (or `/usr/local/bin/` if run as root)
 5. Prints a `provenex-ingest --help` to confirm it works
 
-Want to inspect the install script before running it? It's at https://signup.provenex.ai/install — view it as a regular URL, then run when you're happy.
+Want to inspect the install script before running it? It's at https://signup.provenex.ai/install; view it as a regular URL, then run when you're happy.
 
 ## Verifying the binary
 
@@ -96,8 +96,8 @@ Every subcommand respects the same config flags:
 | `--api-key` | `PROVENEX_API_KEY` | (required) | Your trial Bearer token |
 | `--upstream` | `PROVENEX_UPSTREAM` | `https://api.provenex.ai` | Where to forward |
 | `--mode` | `PROVENEX_MODE` | `plain` | `plain` or `hash` |
-| `--salt` | `PROVENEX_HMAC_SALT` | — | Per-tenant HMAC salt; required when `--mode hash` |
-| `--concurrent` | — | 4 | Max parallel uploads (for batch/watch) |
+| `--salt` | `PROVENEX_HMAC_SALT` |; | Per-tenant HMAC salt; required when `--mode hash` |
+| `--concurrent` |; | 4 | Max parallel uploads (for batch/watch) |
 
 ## What the binary contains (and doesn't)
 
@@ -114,14 +114,14 @@ Every subcommand respects the same config flags:
 - Any policy configuration
 - Any customer-specific data (state is in-memory only; nothing persisted to disk)
 
-A reverse-engineer of this binary reveals nothing proprietary — by design. The catch surface lives entirely on the server side at `api.provenex.ai`. The binary is a thin, auditable, content-redacting forwarder.
+A reverse-engineer of this binary reveals nothing proprietary; by design. The catch surface lives entirely on the server side at `api.provenex.ai`. The binary is a thin, auditable, content-redacting forwarder.
 
 ## Air-gapped customers
 
 If you can't reach `crates.io` / `ghcr.io` / `github.com` from production:
 
 - Build offline from a vendored copy: `cargo vendor && cargo build --offline --release`
-- Air-gap-mirror the Docker image to your internal registry: `docker save ... | ssh registry docker load`
+- Air-gap-mirror the Docker image to your internal registry: `docker save . . | ssh registry docker load`
 - For paid/enterprise deployments, we also ship a signed binary tarball via secure transfer (contact sales)
 
 ## Updating
@@ -134,11 +134,11 @@ cargo install --git https://github.com/provenex/provenex-ingest provenex-ingest 
 docker pull ghcr.io/provenex/provenex-ingest:latest
 docker restart provenex-ingest
 
-# shell installer (re-run; it overwrites)
+# shell installer (re-run: it overwrites)
 curl -fsSL https://signup.provenex.ai/install | sh
 ```
 
-The trial-launch binary version is `v0.1.x`. We follow semver for the public CLI surface (subcommand names, flags) — breaking changes go to a major version bump and we email all active trial customers before.
+The trial-launch binary version is `v0.1.x`. We follow semver for the public CLI surface (subcommand names, flags); breaking changes go to a major version bump and we email all active trial customers before.
 
 ## Reporting issues
 
