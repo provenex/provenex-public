@@ -83,14 +83,12 @@ Export traces from LangSmith's UI as JSON, save as `*.otlp.json` files, then use
 
 ### LangFuse
 
-```python
-from langfuse import Langfuse
-langfuse = Langfuse(
-    host="https://api.provenex.ai",
-    public_key="pvx_trial_xxx",
-    secret_key="pvx_trial_xxx",  # trial uses single Bearer
-)
-```
+LangFuse's SDK authenticates against LangFuse, not Provenex. Two integration shapes:
+
+1. **Fan-out at the OTel layer (recommended).** If LangFuse is already running OTel under the hood, configure your collector to fan-out one copy to LangFuse and a second copy to `https://api.provenex.ai/v1/traces` with the Provenex Bearer. See the OTel Collector block in Step 3.
+2. **Export and replay.** Export LangFuse's stored traces as OTLP/JSON, then `provenex-ingest batch ./exports/` (same as the LangSmith path above).
+
+We do not accept the LangFuse public/secret-key pair on the Provenex endpoint.
 
 ### AWS Bedrock Agents
 
@@ -123,7 +121,11 @@ Where you run **what** depends on whether you're using a hosted SaaS, your own c
 
 ### Pattern A: Single VM / single container (greenfield, dev, evaluation)
 
-Run your agent with an OTLP exporter pointed at `https://api.provenex.ai/v1/traces`. Done. No collector, no sidecar, no platform integration. The agent's OTLP exporter handles batching + retries.
+Run your agent with an OTLP exporter pointed at `https://api.provenex.ai/v1/traces`. The exporter is the standard OpenTelemetry one your framework already ships (LangChain, LlamaIndex, OpenAI SDK with `openinference-instrumentation`, etc.). It batches and retries on its own.
+
+That is the entire customer-side footprint. **No `provenex-ingest` binary, no OTel Collector, no sidecar.** The ingest engine runs server-side; your agent's OTLP exporter is the only moving part.
+
+You'd add the optional `provenex-ingest` binary (Pattern C below) only if you need (a) HMAC content-hashing so prompts and tool I/O are hashed before they leave your environment, (b) batch-replay of historical `.otlp.json` files, (c) a local OTLP receiver your OTel Collector posts to instead of `api.provenex.ai`, or (d) the `--report` HTML artifact and verdict-feedback share-back.
 
 ### Pattern B: Multi-node, single region (typical production)
 
@@ -413,7 +415,7 @@ References: [LangSmith with OpenTelemetry](https://docs.langchain.com/langsmith/
 
 ## Step 1. Get a trial API key
 
-Sign up at https://provenex.ai/trial (Phase 2; for now request a key from us directly). You'll receive an email with:
+Sign up at https://signup.provenex.ai/signup (self-serve; takes about a minute). You'll receive an email with:
 
 ```
 Tenant ID:       <uuid>
@@ -427,9 +429,9 @@ The key is shown **once** at issuance. Store it in your secret manager.
 Verify your key works:
 
 ```bash
-export PROVENEX_API_KEY="pvx_trial_. ."
+export PROVENEX_API_KEY="pvx_trial_REPLACE_WITH_YOUR_KEY_SUFFIX"
 
-curl https://provenex-verdict.fly.dev/v1/health/key \
+curl https://api.provenex.ai/v1/health/key \
   -H "Authorization: Bearer $PROVENEX_API_KEY"
 ```
 
@@ -437,9 +439,9 @@ You should see:
 
 ```json
 {
-  "tenant_id": ". .",
+  "tenant_id": "<uuid>",
   "plan": "trial",
-  "trial_expires_at": ". ."
+  "trial_expires_at": "<iso-8601 timestamp 30 days out>"
 }
 ```
 
@@ -448,7 +450,7 @@ You should see:
 The simplest path is `curl` with an existing trace file:
 
 ```bash
-curl -X POST https://provenex-verdict.fly.dev/v1/receipts \
+curl -X POST https://api.provenex.ai/v1/receipts \
   -H "Authorization: Bearer $PROVENEX_API_KEY" \
   -H "Content-Type: application/json" \
   --data-binary @/path/to/your-trace.otlp.json
@@ -480,7 +482,7 @@ Don't have an OTel trace handy? Try Provenex's bundled EchoLeak reconstruction:
 
 ```bash
 # Clone the repo, then:
-curl -X POST https://provenex-verdict.fly.dev/v1/receipts \
+curl -X POST https://api.provenex.ai/v1/receipts \
   -H "Authorization: Bearer $PROVENEX_API_KEY" \
   -H "Content-Type: application/json" \
   --data-binary @fixtures/external/breach_disclosures/echoleak/reconstructed_trace.otlp.json
@@ -509,7 +511,7 @@ exporters:
 
   # Add this exporter for Provenex
   otlphttp/provenex:
-    endpoint: https://provenex-verdict.fly.dev
+    endpoint: https://api.provenex.ai
     headers:
       Authorization: "Bearer ${PROVENEX_API_KEY}"
     # The collector posts to <endpoint>/v1/traces by default, which is
@@ -535,7 +537,7 @@ from traceloop.sdk import Traceloop
 
 Traceloop.init(
     app_name="my-agent",
-    api_endpoint="https://provenex-verdict.fly.dev",
+    api_endpoint="https://api.provenex.ai",
     api_key="pvx_trial_. .",
     disable_batch=False,
 )
@@ -547,7 +549,7 @@ LangFuse:
 from langfuse import Langfuse
 
 langfuse = Langfuse(
-    host="https://provenex-verdict.fly.dev",
+    host="https://api.provenex.ai",
     public_key="pvx_trial_. .",
     secret_key="pvx_trial_. .",   # same value; trial uses single Bearer
 )
@@ -558,7 +560,7 @@ langfuse = Langfuse(
 The synchronous response from `/v1/receipts` returns verdicts for the batch you just posted. For longer-term retrieval (analyst review, SIEM forwarding, dashboard polling), use:
 
 ```bash
-curl "https://provenex-verdict.fly.dev/v1/verdicts?limit=100&since=2026-06-01T00:00:00Z" \
+curl "https://api.provenex.ai/v1/verdicts?limit=100&since=2026-06-01T00:00:00Z" \
   -H "Authorization: Bearer $PROVENEX_API_KEY"
 ```
 
@@ -654,7 +656,8 @@ Once you've seen Red verdicts firing on your real telemetry, the natural next st
 
 ## Help
 
-- This guide: https://github.com/yourorg/provenex-mvp/blob/main/docs/onboarding-trial.md
 - Engine architecture: [docs/how-provenex-catches.md](how-provenex-catches.md)
+- Telemetry-shape pre-flight check: [docs/telemetry-checklist.md](telemetry-checklist.md)
+- Data-handling posture: [docs/data-handling-posture.md](data-handling-posture.md)
 - The pitch context: [README.md](../README.md)
-- Email / Slack / something. TBD by Phase 2
+- **Email skulk@provenex.ai.** Bug reports, feature asks, trace-shape questions, "this fixture surprised me" feedback all go to the same inbox. Reply to your welcome email or write directly; we read every one.
