@@ -71,17 +71,31 @@ try:
 except Exception as e:
     print(f'  bad response: {e}')
     sys.exit()
-red = d.get('red_verdicts', 0)
-egress = d.get('receipts_ingested', 0)
-print(f'  egress points evaluated: {egress}')
-print(f'  red verdicts fired:      {red}')
-for v in d.get('verdicts', []):
-    binding = v.get('binding_reason') or '(no binding)'
-    risk = v.get('risk') or '?'
-    explanation = (v.get('explanation') or '').split(';')[0].strip()[:90]
-    print(f'    - {binding} / {risk}')
-    if explanation:
-        print(f'      {explanation}')
+findings = d.get('findings', []) or []
+if findings:
+    red = d.get('red_verdicts', 0)
+    print(f'  Found {red} unsafe chain(s).')
+    for i, f in enumerate(findings, 1):
+        print(f'  [{i}] Agent: {f.get(\"agent\", \"?\")}')
+        for r in (f.get('retrieved', []) or [])[:3]:
+            print(f'      Retrieved: {r.get(\"label\", \"?\")}')
+        aa = f.get('attempted_action', {}) or {}
+        print(f'      Attempted action: {aa.get(\"label\", \"?\")}')
+        wf = (f.get('why_flagged') or '').strip()
+        if wf:
+            print(f'      Why flagged: {wf}')
+else:
+    red = d.get('red_verdicts', 0)
+    egress = d.get('receipts_ingested', 0)
+    print(f'  egress points evaluated: {egress}')
+    print(f'  red verdicts fired:      {red}')
+    for v in d.get('verdicts', []):
+        binding = v.get('binding_reason') or '(no binding)'
+        risk = v.get('risk') or '?'
+        explanation = (v.get('explanation') or '').split(';')[0].strip()[:90]
+        print(f'    - {binding} / {risk}')
+        if explanation:
+            print(f'      {explanation}')
 "
 
   if [ "$RENDER_HTML" = "1" ] && [ -f "$response_json" ]; then
