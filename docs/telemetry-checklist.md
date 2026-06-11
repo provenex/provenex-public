@@ -67,7 +67,7 @@ Each of these unlocks a specific catch class. Order matters; first ones first.
 | `enduser.id` (or `user.id` / `gen_ai.user.id`) | **Actor identity** for Phase B risk accumulation across sessions. Required for cross-agent sticky-risk propagation. Phase D (cross-agent fan-out catching the "Alice's ChatGPT activity elevates her in-house agent") needs this. |
 | `gen_ai.agent.name` | Agent topology; drives latent-attack-path BFS. Without it, the latent path enumerator can still surface topology, but agent attribution is `agent://<service.name>`. |
 | `service.name` | Multi-service deployments; disambiguates two agents under the same `agent.name`. |
-| `data.zone` on tool spans (SDK-emitted) | **Authoritative trust-zone declaration on the SPAN itself**, in addition to the `trust_zones.yaml` URL-pattern resolver. Values are kebab-case: `untrusted-external`, `internal`, `privileged-pii`, `external-egress`, `privileged-action`. When the SDK declares this, it WINS over any URL-pattern catch-all (`tool://*` → internal, `model://*` → internal, etc.) that would otherwise classify the span as infrastructure noise. Without it, framework wrapper spans + LLM-call spans collapse to `tool://*` / `model://*` catch-alls and get classified as internal-data sources — which over-fires `internal-egress` on every LLM-driven agent reply. With it, the engine knows which calls operate on real internal data vs. which are framework transformations. See `dogfood/agents/_tool_wrapper.py` for the convention. |
+| `data.zone` on tool spans (SDK-emitted) | **Authoritative trust-zone declaration on the SPAN itself**, in addition to the `trust_zones.yaml` URL-pattern resolver. Values are kebab-case: `untrusted-external`, `internal`, `privileged-pii`, `external-egress`, `privileged-action`. When the SDK declares this, it WINS over any URL-pattern catch-all (`tool://*` → internal, `model://*` → internal, etc.) that would otherwise classify the span as infrastructure noise. Without it, framework wrapper spans + LLM-call spans collapse to `tool://*` / `model://*` catch-alls and get classified as internal-data sources, which over-fires `internal-egress` on every LLM-driven agent reply. With it, the engine knows which calls operate on real internal data vs. which are framework transformations. See `dogfood/agents/_tool_wrapper.py` for the convention. |
 
 ### Tier 3. High-fidelity signals (vendor-specific: pass through automatically)
 
@@ -258,3 +258,154 @@ Run one scan on whatever export you have today. The report's Detection
 Readiness section tells you, per detection class, what your current
 telemetry supports and the exact instrumentation or routing change that
 unlocks the next class. You never have to guess what to instrument.
+
+## How to export audit logs from your SaaS agent platforms
+
+Concrete, verified steps per platform: whether the telemetry exists by
+default or an admin must turn it on, what plan it is gated on, and how to
+get the export out.
+
+### ChatGPT Enterprise (OpenAI Compliance API)
+
+**Default or opt-in:** Opt-in. Workspace activity is logged, but API
+access to it (the Compliance API / Compliance Logs Platform) must be
+explicitly enabled for your workspace by OpenAI. Enterprise and Edu
+plans; not available on Team.
+
+How to export:
+
+1. As a user who is an Owner of both the OpenAI organization AND the
+   ChatGPT Enterprise workspace, create an API key in the OpenAI
+   Platform (Owned by: You; Permissions: All). It is shown once; store
+   it securely.
+2. Confirm the Organization ID in your Platform API settings matches the
+   organization of the ChatGPT workspace, and note your `workspace_id`
+   from the ChatGPT admin console under Workspace details.
+3. Email support@openai.com to request Compliance API access. Include
+   the last 4 characters of the key, the key name, who created it, and
+   the scope you want (read, write, or both).
+4. Pull conversations, uploaded files, admin actions, auth events, and
+   agent activity as JSON from the Compliance API. The Compliance Logs
+   Platform retains 30 days, so schedule a recurring pull and keep your
+   own archive.
+
+**With Provenex:** we have a native ChatGPT Enterprise audit adapter;
+point your scheduled pull at us (or drop the JSON files) and the
+audit-shape findings described earlier in this section light up.
+
+### Claude (Anthropic)
+
+Two separate paths: admin audit logs and Claude Code telemetry.
+
+**Claude Enterprise audit logs. Default or opt-in:** recorded for
+Enterprise organizations (not available on Team); no enable step is
+documented, but verify visibility in your admin console.
+
+1. As an Organization Owner or Primary Owner, open Organization
+   settings > Data and Privacy.
+2. Click Export logs. All audit logs from the past 180 days are
+   aggregated.
+3. Watch for the email with a download link (active for 24 hours).
+   Format is JSON or CSV; events can also be streamed to SIEM tooling
+   via Anthropic's Compliance API.
+4. Note: chat and project titles/content are not included, only their
+   identifiers.
+
+**Claude Code OpenTelemetry export. Default or opt-in:** opt-in via
+environment variables; available wherever Claude Code runs.
+
+1. Set `CLAUDE_CODE_ENABLE_TELEMETRY=1`.
+2. Set `OTEL_METRICS_EXPORTER=otlp` and `OTEL_LOGS_EXPORTER=otlp`.
+3. Point `OTEL_EXPORTER_OTLP_PROTOCOL` and
+   `OTEL_EXPORTER_OTLP_ENDPOINT` at your collector (add
+   `OTEL_EXPORTER_OTLP_HEADERS` if your collector needs auth).
+4. Fleet-wide: put the same `env` block in Claude Code's managed
+   settings file so every developer exports without per-user setup.
+
+**With Provenex:** Claude Code OTel is real span/event telemetry and
+ingests directly (best-supported SaaS coding agent today). Claude
+Enterprise audit exports ingest via the audit-event path.
+
+### Glean
+
+**Default or opt-in:** admin audit logs appear in the Admin Console
+without a documented enable step; Glean's docs do not state plan
+gating, so verify in your admin console that your plan includes them.
+
+1. In the Glean Admin Console, go to Users & permissions > Audit logs.
+2. Filter by date, actor, or action, then click Export to CSV (all log
+   fields included: timestamps, identities, actions, affected
+   resources, change details).
+3. Default retention is 30 days; longer windows require contacting your
+   Glean representative, so schedule regular exports.
+4. For continuous SIEM delivery: cloud-prem deployments expose an
+   audit-log group (for example a CloudWatch log group on AWS) you can
+   wire to your SIEM; for Glean-hosted, ask Glean about streaming
+   options.
+5. Note: admin audit logs cover admin actions. End-user search and
+   assistant activity is surfaced separately; verify in your admin
+   console which activity exports your plan includes.
+
+**With Provenex:** the Glean audit shape is supported; send the CSV
+export or the SIEM stream and we model it like the other SaaS agents.
+
+### Microsoft Copilot (Purview audit)
+
+**Default or opt-in:** on by default for Microsoft 365 enterprise
+tenants. Copilot interactions are logged automatically under Audit
+(Standard), included in enterprise licenses; no extra Copilot-specific
+configuration is needed. Two exceptions: auditing is NOT on by default
+for SMB licenses (Business Basic/Standard/Premium), and interactions
+with non-Microsoft AI apps (record types `AIAppInteraction` /
+`ConnectedAiAppInteraction`) require enabling Purview pay-as-you-go
+billing.
+
+1. Confirm auditing is on for the tenant (Purview portal > Audit, or
+   `Get-AdminAuditLogConfig | FL UnifiedAuditLogIngestionEnabled` in
+   Exchange Online PowerShell).
+2. In the Microsoft Purview portal, select Audit and search with
+   operation name `CopilotInteraction` (related record types:
+   `CopilotInteraction`, `ConnectedAIAppInteraction`,
+   `AIAppInteraction`).
+3. Export search results to CSV from the same screen.
+4. For a continuous feed, pull via `Search-UnifiedAuditLog` in Exchange
+   Online PowerShell or subscribe via the Office 365 Management
+   Activity API.
+5. Retention: 180 days on Audit (Standard); Audit (Premium / E5) and
+   retention policies extend to a year or more. Records include
+   `AccessedResources` (with sensitivity label IDs) and the
+   `XPIADetected` flag.
+
+**With Provenex:** the M365 Copilot audit feed is what powers the
+high-fidelity Copilot signals listed in Tier 3 above, including the
+XPIA (EchoLeak-class) detection flag.
+
+### Salesforce Agentforce
+
+**Default or opt-in:** opt-in. Agentforce Session Tracing must be
+toggled on by an admin and requires Data Cloud provisioned and Einstein
+enabled; only conversations AFTER enablement are traced. Plain event
+log files exist more broadly, but full Event Monitoring is gated on the
+Salesforce Shield (or standalone Event Monitoring) add-on.
+
+1. In Setup, find the Agentforce Session Tracing setting and toggle it
+   On (prerequisites: Data Cloud fully provisioned, Einstein on,
+   Salesforce Standard Data Model v1.128 or higher).
+2. Traces land in Data Cloud as Session Tracing Data Model objects;
+   query or export them from Data Cloud. Session tracing consumes Data
+   Cloud credits, so review the billing considerations page first.
+3. For audit-shaped events, download hourly or daily Event Log Files as
+   CSV (Event Log File Browser or the API). Retention and event
+   coverage depend on whether you have the Shield / Event Monitoring
+   add-on; verify in your admin console.
+4. Schedule the export; a daily file drop is enough to start.
+
+**With Provenex:** Agentforce audit/event exports work today via the
+audit-event path; a native adapter for the session-tracing schema is on
+our roadmap.
+
+---
+
+Facts above were verified June 2026 against vendor documentation.
+Vendors change plan gating, retention windows, and console layouts;
+re-check your admin console before relying on a specific limit.
