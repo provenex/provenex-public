@@ -1,5 +1,8 @@
 # Provenex trial: onboarding guide
 
+> **Step 0, before you onboard: make sure your telemetry is set right.** What Provenex can prove is bounded by what your telemetry carries. Start with the [telemetry checklist](telemetry-checklist.md): it covers required attributes, what each detection class needs, and platform-specific audit-export how-tos for SaaS agents (ChatGPT, Claude, Glean, sales agents). Run one scan on whatever you have; the Detection Readiness section tells you exactly what to fix.
+
+
 Get from "I want to try this" to "I see real Red verdicts on my agent telemetry" in about 10 minutes.
 
 ## What you get
