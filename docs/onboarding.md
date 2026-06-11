@@ -20,6 +20,8 @@ A hosted Provenex trial. Your AI agent telemetry → Provenex's verdict engine �
 
 If you can't generate live telemetry today, you can replay a saved `.otlp.json` file via `curl` and see verdicts immediately; useful for evaluation before integrating.
 
+> **What Provenex cannot see:** we publish our blind spots with the same prominence as our catches; read [what-provenex-cannot-see.md](what-provenex-cannot-see.md) before relying on any green verdict.
+>
 > **Want to check your current instrumentation before integrating?** [docs/telemetry-checklist.md](telemetry-checklist.md) has the full tiered list; what's required, what's strongly preferred, what each missing piece costs you in catch coverage. Most customers using a modern agent framework pass the bar automatically; the checklist makes it explicit so your security team can verify before running the eval.
 
 ## "I don't have OTLP/JSON traces yet: how do I get them?"
@@ -224,7 +226,7 @@ Provenex correlates lineage across telemetry batches **server-side**. You can ha
 
 You **don't** need to:
 
-- Co-locate Provenex with your data plane (Phase 3 ships regional Provenex endpoints; Phase 1 is US-East single-region).
+- Co-locate Provenex with your data plane. The trial runs US-East single-region; regional endpoints are on the roadmap and not yet scheduled.
 - Forward all regions through a central aggregator first; every region can post directly to `api.provenex.ai`. The closure walker dedupes by `trace_id` + `span_id` server-side.
 
 ---
@@ -581,17 +583,34 @@ Each verdict carries:
 - **`risk`**. `high` / `medium` / `low` / `unknown`
 - **`binding_reason`**. the policy that fired:
   - `cross-zone-composition`. the catch the deck describes: untrusted source + privileged data → external egress
+  - `cross-zone-composition-internal`. untrusted + internal (non-PII) → external egress (the canonical honest-mistake shape: agent paste-quotes internal budget / approver notes into a vendor reply)
   - `sensitive-retrieval-egress`. PII reached an external destination (the simpler shape)
+  - `internal-egress`. internal data alone reached an external destination
   - `untrusted-influence-on-privileged-action`. untrusted input drove a real-consequence action inside your tenant
+  - `privileged-data-to-privileged-action`. privileged data flowed into a real-consequence action without authorized provenance
   - `composition-light`. untrusted → egress, no PII required
 - **`hits[].explanation`**. human-readable description of what fired
 - **`closure`**. the receipts on the lineage path from source to egress (in the full audit-log retrieval)
+- **`risk.*`** signals on each receipt. Five continuous 0–100 axes the engine accumulates as it ingests:
+  - `risk.actor`. per-actor history (sticky-Critical at ≥80; the patient-attacker / cross-agent fan-out catch)
+  - `risk.zone`. per-zone aggregate
+  - `risk.resource`. per-resource-fingerprint aggregate (the cross-batch document.id linker)
+  - `risk.content`. cross-source content-hash carry-forward (DLP / EDR / in-house SDK / in-product agent share one signal via payload hash)
+  - `risk.tuple`. **NEW.** Per-receipt novelty of the `(actor, resource, data)` combination over the past 30 days. Three bands: 0 → NOVEL (30), 1–4 → RARE (10), ≥5 → FAMILIAR (0). MAX across the zone-layer tuple and the content-layer tuple. Orthogonal "is this combination normal?" signal — surfaces first-time access patterns that the other four "has this been risky before?" axes don't catch.
 
 A Red verdict means **the chain Provenex reconstructed crosses your trust boundaries**. The next steps are:
 
 1. Read the closure to see which spans are on the path
 2. Decide whether the closure represents a real risk in your environment
-3. Tune your `trust_zones.yaml` if the engine over-classified anything (Phase 2; dashboard editor coming)
+3. Tune your `trust_zones.yaml` if the engine over-classified anything (edit the YAML we load for your tenant and re-run; a dashboard editor is on the roadmap)
+
+### A class of finding worth expecting: latent paths
+
+Some Red verdicts will surface flows that **didn't actually leak sensitive content but trace a path where one prompt change away would**. The canonical shape: your support agent reaches for a customer PII lookup as part of its normal "be thorough" heuristic, even on questions where the PII isn't needed. The reply may be benign in content — "Got it, I'll process your exchange" — but PII is in the egress's lineage closure. The structural composition rule fires.
+
+Customers consistently rank these among the most useful catches: they're not active incidents, but they ARE one-prompt-tweak from becoming one. The recommended treatment is to **triage them as a backlog of agent-prompt tightening work**, not to treat them as engine false positives. Provenex surfaces them; you decide whether to (a) accept the agent's normal pattern, (b) tighten the prompt to gate the PII fetch, or (c) add an SDK-side payload predicate so the zone stamp only applies when the returned record actually contains PII fields. See [docs/payload-content-classification-reframe.md](../../../docs/payload-content-classification-reframe.md) for the third path.
+
+If you want a cleaner separation between "PII really crossed" (high-severity) and "PII pattern in the trace" (latent-path): a per-verdict severity-band annotation is on the roadmap (the design is sketched, not built). Today both surface as Red with the structural composition as the binding reason.
 
 ## What we see and what we don't
 
@@ -604,13 +623,13 @@ A Red verdict means **the chain Provenex reconstructed crosses your trust bounda
 - Span timing
 - End-user identifiers (`enduser.id`. usually an email)
 
-**We currently see (Phase 1; will be hash-only in Phase 1.5):**
+**We see in the default mode (hash-only mode available today; see below):**
 
 - `gen_ai.input.messages`. prompts
 - `gen_ai.output.messages`. assistant outputs
 - `gen_ai.tool.call.arguments` and `.result`. tool I/O
 
-**Phase 1.5 (open-source ingestor, ETA July 2026)** will let you hash these fields client-side using the HMAC salt issued at trial signup. Provenex will see only structural metadata + content hashes; cross-source linking still works via the hash. For the trial, send what your collector emits; your enterprise environment can audit the over-the-wire payload against the live ingest log.
+**Hash-only mode (available today)**: the open-source `provenex-ingest` forwarder, run with `--mode=hash`, hashes these fields client-side using the HMAC salt issued at trial signup. Provenex then sees only structural metadata + content hashes; cross-source linking still works via the hash. Two current limits to know about: resource URIs are NOT redacted (they drive classification), and the redaction field list is fixed (a per-customer redaction-pattern flag is on the roadmap). If you skip the forwarder, send what your collector emits; your enterprise environment can audit the over-the-wire payload against the live ingest log.
 
 ## Limits during trial
 
@@ -620,15 +639,15 @@ A Red verdict means **the chain Provenex reconstructed crosses your trust bounda
 | Body size per request | 16 MiB |
 | Rate limit | 100 req/min per tenant (soft; contact us if you need more) |
 | Verdict retention | 30 days from issuance |
-| Cross-batch lineage | Phase 2; currently each batch is scoped to itself |
+| Cross-batch lineage | Partial: batches join when document ids or content hashes match across uploads; full cross-batch closure is on the roadmap |
 
 ## Frequently asked
 
-**Where does my data go?** US East (Ashburn) via Fly.io. EU residency in Phase 3. Telemetry is encrypted in transit (TLS 1.3) and at rest (Neon Postgres TDE). No third-party data sharing.
+**Where does my data go?** US East (Ashburn) via Fly.io. EU residency is on the roadmap and not yet scheduled. Telemetry is encrypted in transit (TLS 1.3) and at rest (Neon Postgres TDE). No third-party data sharing.
 
-**What if I want to test air-gapped?** Phase 3 ships the verdict-service binary you can run on your own infrastructure with your own keys. Trial is hosted-only.
+**What if I want to test air-gapped?** A self-hosted verdict-service deployment (your infrastructure, your keys) is on the roadmap; the trial is hosted-only. If air-gapped is a hard requirement for your pilot, tell us and we will scope it with you.
 
-**Does Provenex see customer PII?** Today: yes if your traces carry it (prompts, retrieved chunks). Phase 1.5: no, only content hashes. See "What we see and what we don't" above.
+**Does Provenex see customer PII?** In the default mode: yes, if your traces carry it (prompts, retrieved chunks). In hash-only mode (the `provenex-ingest` forwarder with `--mode=hash`): no, only content hashes, with the resource-URI caveat above. See "What we see and what we don't".
 
 **Can I retrieve the signed verdict for compliance?** Yes; `/v1/verdicts` returns the full ed25519-signed artifact. Verify against the public key in `trial-2026-06` (publishable on request).
 
@@ -650,9 +669,9 @@ A Red verdict means **the chain Provenex reconstructed crosses your trust bounda
 
 Once you've seen Red verdicts firing on your real telemetry, the natural next steps are:
 
-1. **Authoring your `trust_zones.yaml`**. tell the engine which of YOUR vendor URIs are privileged-PII, which destinations count as external-egress. Today this requires a custom build; Phase 2 ships a dashboard editor.
+1. **Authoring your `trust_zones.yaml`**. tell the engine which of YOUR vendor URIs are privileged-PII, which destinations count as external-egress. Today this is a YAML file we load for your tenant (send it to us, or run `provenex-scan --propose-config` on your own logs to generate a starting point); a dashboard editor is on the roadmap.
 2. **Wiring verdicts to your SIEM**. Provenex emits Splunk-HEC / Datadog / ECS-native NDJSON via the upcoming `/v1/verdicts/stream` SSE endpoint. Today, poll `/v1/verdicts?since=` from your SOAR.
-3. **Enforcement at the egress boundary**. Phase 3 ships the rung-3 PEP that holds privileged actions and emits `require_approval` decisions. Today is observe-only.
+3. **Enforcement at the egress boundary**. The PEP that holds privileged actions and emits `require_approval` decisions exists in the engine today (forward-proxy and Envoy ext_authz integrations); the trial runs observe-only. Ask us if you want to scope an enforcement pilot.
 
 ## Help
 

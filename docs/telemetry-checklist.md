@@ -67,6 +67,7 @@ Each of these unlocks a specific catch class. Order matters; first ones first.
 | `enduser.id` (or `user.id` / `gen_ai.user.id`) | **Actor identity** for Phase B risk accumulation across sessions. Required for cross-agent sticky-risk propagation. Phase D (cross-agent fan-out catching the "Alice's ChatGPT activity elevates her in-house agent") needs this. |
 | `gen_ai.agent.name` | Agent topology; drives latent-attack-path BFS. Without it, the latent path enumerator can still surface topology, but agent attribution is `agent://<service.name>`. |
 | `service.name` | Multi-service deployments; disambiguates two agents under the same `agent.name`. |
+| `data.zone` on tool spans (SDK-emitted) | **Authoritative trust-zone declaration on the SPAN itself**, in addition to the `trust_zones.yaml` URL-pattern resolver. Values are kebab-case: `untrusted-external`, `internal`, `privileged-pii`, `external-egress`, `privileged-action`. When the SDK declares this, it WINS over any URL-pattern catch-all (`tool://*` → internal, `model://*` → internal, etc.) that would otherwise classify the span as infrastructure noise. Without it, framework wrapper spans + LLM-call spans collapse to `tool://*` / `model://*` catch-alls and get classified as internal-data sources — which over-fires `internal-egress` on every LLM-driven agent reply. With it, the engine knows which calls operate on real internal data vs. which are framework transformations. See `dogfood/agents/_tool_wrapper.py` for the convention. |
 
 ### Tier 3. High-fidelity signals (vendor-specific: pass through automatically)
 
@@ -92,7 +93,7 @@ Before pointing your traces at Provenex's trial endpoint, sanity-check your tele
 ```bash
 # Pipe a sample OTLP/JSON file from your collector to scan locally
 curl https://provenex.ai/static/preflight.sh | bash -s your-trace.otlp.json
-# (Phase 2: script is the wrapper around `provenex-scan` that produces
+# (roadmap: script is the wrapper around `provenex-scan` that produces
 #  the Step-0 qualification report without sending anything to us.)
 ```
 
@@ -168,7 +169,7 @@ If your framework isn't listed, **send us a sample trace**. we'll tell you what'
 2. **`parent_span_id` is empty on root spans**. that's expected (every trace has one root). The engine handles roots correctly; the recovery mechanisms only engage when an intermediate span has missing/broken parent links.
 3. **LangChain → OpenAI SDK does NOT propagate context cleanly**. the chat span looks like a sibling, not a child, of the agent invocation. Provenex's cross-emitter LLM stitcher handles this; you don't need to fix it client-side.
 4. **Sampling will break you.** If your collector is configured to sample 10% of traces, Provenex sees a 10% subset and the closure walker can miss the cross-batch hops. Provenex is the consumer that needs **100% sampling**. If you can't do 100% globally, configure your sampler to send 100% of GenAI traces.
-5. **Sensitive content in resource URIs.** If your `gen_ai.data_source.id` is `outlook://mailbox/alice@acme.com/inbox/. .`, then "Alice's email" reaches Provenex inside the resource URI. The hash-only mode redacts content fields but NOT resource URIs (because those drive classification). Either (a) hash the local-part client-side before instrumentation, or (b) configure `provenex-ingest-proxy` Phase 2 redaction patterns when they ship.
+5. **Sensitive content in resource URIs.** If your `gen_ai.data_source.id` is `outlook://mailbox/alice@acme.com/inbox/. .`, then "Alice's email" reaches Provenex inside the resource URI. The hash-only mode redacts content fields but NOT resource URIs (because those drive classification). Either (a) hash the local-part client-side before instrumentation, or (b) use the `provenex-ingest` forwarder's redaction patterns when the per-customer pattern flag ships (on the roadmap; the field list is fixed today).
 
 ---
 
@@ -182,7 +183,7 @@ Every Provenex scan emits a **Step-0 qualification verdict** that names what the
 - `NotEvaluableAdapterEmpty`. zero receipts produced; check that the body is OTLP JSON
 - `NotEvaluableAdapterMissing`. ≥80% of receipts fell to `span://<hex>` synthetic IDs; tell us your framework
 
-These appear in `/v1/receipts` responses (Phase 2; full surface in the dashboard); for now, use `provenex-scan` against a sample file locally to get the full readout before integration.
+These appear in `/v1/receipts` responses (a dashboard surface for them is on the roadmap); for now, use `provenex-scan` against a sample file locally to get the full readout before integration.
 
 ---
 
@@ -192,3 +193,68 @@ These appear in `/v1/receipts` responses (Phase 2; full surface in the dashboard
 - [Open-source ingest proxy (hash mode)](ingest-proxy.md)
 - [What the engine catches and why](how-provenex-catches.md)
 - [The full architectural reference](../README.md) (§"What telemetry Provenex expects")
+
+## If you run SaaS agents only (no in-house agent code)
+
+Most teams start here: coding assistants (ChatGPT, Claude, Copilot) and
+sales/GTM agents (Apollo, Artisan, Agentforce), with no agent code of their
+own to instrument. Telemetry from these platforms is AUDIT-EVENT shaped,
+not span-shaped: strong user identity, per-action records, but no causal
+chains and no egress spans. Here is what that buys today and how to get more.
+
+### ChatGPT (Enterprise) today
+
+- **Out of the box:** we ingest the ChatGPT Enterprise Compliance/audit
+  export with a native adapter. You get: who used which tools/GPTs against
+  which connectors, latent risky tool combinations (sensitive read +
+  external send capability in one assistant), and a Detection Readiness
+  report saying exactly what is provable.
+- **Not provable from audit events alone:** end-to-end exfil chains (no
+  parent links to walk). Verdicts stay honestly labeled as inferred or
+  not covered rather than silently green.
+- **To get more:** route assistant egress (actions/connectors that leave
+  your tenant) through the Provenex egress proxy so destinations become
+  visible and enforceable.
+
+### Claude today
+
+- **Claude Code:** native OpenTelemetry export (opt-in env vars). This is
+  real span telemetry; point it at your collector and Provenex ingests it
+  directly. Best-supported SaaS coding agent today.
+- **Claude API / Claude Enterprise:** admin audit logs only; same
+  audit-shape support and limits as ChatGPT above. If your team builds
+  anything on the Claude API, one instrumentation library (OpenLLMetry or
+  OpenInference) upgrades you to full chain telemetry.
+
+### Sales/GTM SaaS agents (Apollo, Artisan, Agentforce, and similar)
+
+- **Out of the box:** audit/activity exports from these platforms ingest
+  via the audit-event path where an export exists. You get inventory and
+  latent-composition findings: which agents can read CRM data AND send
+  external email, who triggered what, sequence-level anomalies
+  (export-then-send patterns).
+- **Agentforce specifically:** session-tracing events are richer than
+  plain audit logs but use Salesforce's own schema; a native adapter is on
+  our roadmap, and audit exports work today.
+- **To get the most:** (1) send us the platform's audit/activity export on
+  a schedule (a daily file drop is enough to start), (2) put outbound
+  email/webhook egress behind the proxy where the platform allows custom
+  SMTP/relay or webhook endpoints, (3) ask us for the adapter request
+  bundle if your platform's export is not recognized: we turn unknown
+  formats into adapters quickly and the bundle tells us exactly what to map.
+
+### Knowledge/search agents (Glean and similar)
+
+Glean-class assistants sit on connectors into your most sensitive corpora
+(Drive, Slack, Jira, tickets) and can act on them, which makes them the
+highest-value audit-log source we ingest. We model these the same way as
+other SaaS agents: audit events in, latent cross-corpus exposure paths and
+permission-drift findings out; chain-level proof requires egress
+visibility, same as above.
+
+### The general rule
+
+Run one scan on whatever export you have today. The report's Detection
+Readiness section tells you, per detection class, what your current
+telemetry supports and the exact instrumentation or routing change that
+unlocks the next class. You never have to guess what to instrument.

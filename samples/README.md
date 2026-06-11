@@ -37,7 +37,7 @@ curl -H "Authorization: Bearer $PROVENEX_API_KEY" \
 ```
 
 Each verdict includes:
-- The full **ed25519-signed artifact** (verifiable against the public key; Phase 2 publishes the verifier)
+- The full **ed25519-signed artifact** (verifiable against the public key; a standalone published verifier is on the roadmap)
 - The **closure** (which spans on the lineage walked back from the egress)
 - The **binding reason** (the policy that fired)
 - **Risk / verdict / confidence** axes
