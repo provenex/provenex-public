@@ -409,3 +409,11 @@ our roadmap.
 Facts above were verified June 2026 against vendor documentation.
 Vendors change plan gating, retention windows, and console layouts;
 re-check your admin console before relying on a specific limit.
+
+### Continuous monitoring (not just one-time exports)
+
+The how-tos above produce a file; monitoring should not stop there. What works today with the public provenex-ingest binary (see its built-in help for full flags):
+
+- **Live span sources** (Claude Code OTel, your own instrumented agents): run `provenex-ingest listen --bind addr:port` as an OTLP/HTTP receiver and point your OTel Collector at it. Continuous by construction; supports --mode hash so content is HMAC-hashed before leaving your environment.
+- **Audit-log sources** (ChatGPT, Claude Enterprise, Glean, Purview, Agentforce): schedule the vendor-side export on a cron into a drop directory and run `provenex-ingest watch <dir/> --interval N` (idempotent; already-processed files are tracked). Exports need to be OTLP-shaped when dropped; recognized audit formats have converters, and the scan output names the converter when a format is detected. You get verdicts continuously at your export cadence.
+- **Native vendor pollers** (Provenex pulling the Compliance API, Purview, or Glean APIs for you on a schedule, no cron on your side): not shipped yet. Email skulk@provenex.ai and we will set up live audit monitoring with you and prioritize your platform.
