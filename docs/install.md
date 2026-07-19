@@ -1,146 +1,120 @@
-# Installing `provenex-ingest`
+# Installing the customer-local Provenex edge
 
-The open-source customer-side ingestor. Source is public and auditable; the binary you install is built from that source. **We never email binaries**. every install path below pulls from a verifiable source.
+The current evaluation bundle contains a local telemetry ingestor/workspace and
+an HTTP reverse-proxy enforcement point. Raw telemetry, discovery state, and
+signed action receipts remain in the evaluation environment. Only a bounded
+ADR-008 scoring closure is sent to the common hosted scorer.
 
-Three install methods, pick whichever your stack prefers.
+The older public `provenex-ingest` binary is superseded for customer
+evaluations: it forwards raw or partially redacted OTLP centrally and does not
+provide the local workspace or enforcement proxy described here.
 
-## Path 1. Cargo (Rust toolchain)
+## Recommended workstation installation
 
-```bash
-cargo install --git https://github.com/provenex/provenex-ingest provenex-ingest
-```
+Prerequisites:
 
-That downloads the source, compiles it locally, drops the binary at `~/.cargo/bin/provenex-ingest`. Your security team can audit the source between `git clone` and `cargo install` if they prefer the explicit version:
+- a customer-specific, unexpired `pvx_trial_*` key;
+- the Provenex console at `http://localhost:5173`;
+- the loopback installer service supplied by the evaluation operator;
+- free local ports 18080, 4318, and 8088; and
+- a non-production upstream for the initial safe rehearsal.
 
-```bash
-git clone https://github.com/provenex/provenex-ingest.git
-cd provenex-ingest
-# audit the source here: it's ~600 lines of Rust
-cargo install --path . --bin provenex-ingest
-```
+In the console:
 
-**Requires:** Rust 1.86+ (any recent stable). Install via [rustup](https://rustup.rs) if you don't have it.
+1. Open **Connect**.
+2. Set the hosted scorer to `https://provenex-verdict.fly.dev`.
+3. Enter the customer's key privately and choose **Test connection**.
+4. Continue only when the UI shows reachable, authorized, and unexpired.
+5. Open **Install Edge**, leave **Safe block rehearsal** checked, and start in
+   `observe` mode.
+6. Wait until local workspace, reverse proxy, and hosted scorer are all healthy.
+7. Choose **Use local workspace**.
 
-## Path 2. Docker
+The installer retrieves the scorer's public Ed25519 verification key and
+generates separate local secrets for HMAC pseudonymization, workspace auth,
+edge signing, and PEP proof signing. Only the public verification material is
+shared between components; private keys remain with their owner.
 
-```bash
-docker pull ghcr.io/provenex/provenex-ingest:latest
-```
+## Operator Compose installation
 
-The image is built reproducibly from the same source via GitHub Actions; the digest is verifiable against the release manifest. Run it as a sidecar to your OTel Collector or as a one-shot CLI:
-
-```bash
-# one-shot CLI: send a file
-docker run --rm \
-  -v $(pwd):/data \
-  -e PROVENEX_API_KEY=pvx_trial_xxx \
-  ghcr.io/provenex/provenex-ingest:latest \
-  send /data/my-trace.otlp.json
-
-# listen as an OTLP receiver
-docker run -d --name provenex-ingest \
-  -p 4318:4318 \
-  -e PROVENEX_API_KEY=pvx_trial_xxx \
-  -e PROVENEX_HMAC_SALT=your-tenant-salt \
-  -e PROVENEX_MODE=hash \
-  ghcr.io/provenex/provenex-ingest:latest \
-  listen
-```
-
-## Path 3. One-line shell installer
-
-For developers who'd rather not install Rust or Docker. The installer detects your OS+architecture (darwin x86/arm, linux x86/arm) and downloads the matching prebuilt binary from the [Releases page](https://github.com/provenex/provenex-ingest/releases):
+Operators working from the monorepo can use the equivalent Compose bundle:
 
 ```bash
-curl -fsSL https://signup.provenex.ai/install | sh
+cp deploy/edge/.env.example deploy/edge/.env
+# Fill every placeholder through a secret manager. Do not commit this file.
+docker compose --env-file deploy/edge/.env \
+  -f deploy/edge/docker-compose.yml up --build
 ```
 
-The script:
-1. Detects your `uname` → picks the right release artifact
-2. Downloads the tarball + the `.shasum`
-3. Verifies the checksum
-4. Extracts the binary to `~/.local/bin/provenex-ingest` (or `/usr/local/bin/` if run as root)
-5. Prints a `provenex-ingest --help` to confirm it works
+The example defaults the central scoring origin to
+`https://provenex-verdict.fly.dev` and enforcement to `observe`. It does not
+contain usable credentials. Do not reuse HMAC salts, database passwords, or PEP
+keys between customers.
 
-Want to inspect the install script before running it? It's at https://signup.provenex.ai/install; view it as a regular URL, then run when you're happy.
+The local endpoints bind to loopback by default:
 
-## Verifying the binary
+| Endpoint | Authentication | Purpose |
+|---|---|---|
+| `127.0.0.1:18080` | local edge bearer | report, verdict, custody, receipts |
+| `127.0.0.1:4318/v1/traces` | local edge bearer | OTLP/HTTP JSON ingest |
+| `127.0.0.1:8088` | request correlation | protected reverse proxy |
 
-Every Release artifact ships with a SHA-256 checksum. After installing:
+Do not publish these listeners directly to the Internet. Put any non-loopback
+deployment behind the customer's network controls and secret manager.
+
+## Readiness checks
 
 ```bash
-# version is embedded
-provenex-ingest --help | head -1
+curl -fsS \
+  -H "Authorization: Bearer $PROVENEX_EDGE_API_TOKEN" \
+  http://127.0.0.1:18080/readyz
 
-# expected SHA-256 for your release (check https://github.com/provenex/provenex-ingest/releases)
-shasum -a 256 $(which provenex-ingest)
+curl -fsS http://127.0.0.1:8088/readyz
 ```
 
-The Releases page is the canonical source for "what hash should I expect for version X on Y platform."
+The edge readiness check includes the hosted scorer. HTTP 402 during setup
+means the customer's trial expired; an unrevoked key is not necessarily an
+unexpired one. Renew or reissue for that same customer.
 
-## What the binary does
+## Connect telemetry
 
-In order of capability, lightest first:
-
-```
-provenex-ingest send <file>            # post one OTLP/JSON file (curl-equivalent)
-provenex-ingest batch <dir/>           # post every *.otlp.json in a directory
-provenex-ingest watch <dir/>           # live-tail a directory; post new files as they arrive
-provenex-ingest listen [--bind addr]   # OTLP/HTTP receiver; forwards to api.provenex.ai
-```
-
-Every subcommand respects the same config flags:
-
-| Flag | Env var | Default | Purpose |
-|---|---|---|---|
-| `--api-key` | `PROVENEX_API_KEY` | (required) | Your trial Bearer token |
-| `--upstream` | `PROVENEX_UPSTREAM` | `https://api.provenex.ai` | Where to forward |
-| `--mode` | `PROVENEX_MODE` | `plain` | `plain` or `hash` |
-| `--salt` | `PROVENEX_HMAC_SALT` |; | Per-tenant HMAC salt; required when `--mode hash` |
-| `--concurrent` |; | 4 | Max parallel uploads (for batch/watch) |
-
-## What the binary contains (and doesn't)
-
-**Contains:**
-- OTLP/JSON parsing
-- HMAC-SHA-256 over content fields (when `--mode hash`)
-- HTTPS forwarding to the upstream
-- Directory scanning + polling for batch/watch modes
-- An axum HTTP server for listen mode
-
-**Does NOT contain:**
-- Any Provenex zone classification rules
-- The closure walker or archetype catalog (those stay on the server)
-- Any policy configuration
-- Any customer-specific data (state is in-memory only; nothing persisted to disk)
-
-A reverse-engineer of this binary reveals nothing proprietary; by design. The catch surface lives entirely on the server side at `api.provenex.ai`. The binary is a thin, auditable, content-redacting forwarder.
-
-## Air-gapped customers
-
-If you can't reach `crates.io` / `ghcr.io` / `github.com` from production:
-
-- Build offline from a vendored copy: `cargo vendor && cargo build --offline --release`
-- Air-gap-mirror the Docker image to your internal registry: `docker save . . | ssh registry docker load`
-- For paid/enterprise deployments, we also ship a signed binary tarball via secure transfer (contact sales)
-
-## Updating
+Point the customer's OTLP/HTTP exporter at the local receiver and authenticate
+with `PROVENEX_EDGE_API_TOKEN`, not the trial key:
 
 ```bash
-# cargo
-cargo install --git https://github.com/provenex/provenex-ingest provenex-ingest --force
-
-# docker
-docker pull ghcr.io/provenex/provenex-ingest:latest
-docker restart provenex-ingest
-
-# shell installer (re-run: it overwrites)
-curl -fsSL https://signup.provenex.ai/install | sh
+curl -fsS -X POST http://127.0.0.1:4318/v1/traces \
+  -H "Authorization: Bearer $PROVENEX_EDGE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @approved-export.otlp.json
 ```
 
-The trial-launch binary version is `v0.1.x`. We follow semver for the public CLI surface (subcommand names, flags); breaking changes go to a major version bump and we email all active trial customers before.
+The response confirms local receipt ingestion. Use the console's Discovery
+view or authenticated local `/report` endpoint for findings. Do not POST the
+file to `provenex-verdict.fly.dev` or `api.provenex.ai`.
 
-## Reporting issues
+Before real telemetry, inspect **Data Custody** and require a runtime-verified
+outbound contract with no raw URI, hostname, prompt, body, email, correlation
+key, receipt ID, or enforcement receipt.
 
-- Public repo issues: https://github.com/provenex/provenex-ingest/issues
-- Security disclosures: security@provenex.ai (PGP key: TBD)
+## Enable enforcement safely
+
+Start in observe mode. Put the protected client behind port 8088 and use the
+installer-owned loopback sink first. The initial denied rehearsal must return
+HTTP 200 and show that it was forwarded with an alert.
+
+After policy review, switch the proxy to `enforce`, wait for readiness, and run
+the exact same request. A trusted block is HTTP 403, `block`, not forwarded,
+and a signed local PEP receipt. If any element is missing, return to observe and
+do not claim live enforcement.
+
+## Stop or reset the evaluation bundle
+
+Use **Stop** in Install Edge for the workstation path. For Compose:
+
+```bash
+docker compose --env-file deploy/edge/.env \
+  -f deploy/edge/docker-compose.yml down
+```
+
+This preserves the Postgres volume. Removing the volume deletes the local
+customer workspace and must be an explicit, separately approved cleanup step.

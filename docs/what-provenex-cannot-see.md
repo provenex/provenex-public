@@ -7,6 +7,10 @@ central for your threat model, ask us: several have designed
 mitigations on the roadmap, and we would rather tell you "not yet" than
 let a diagram imply otherwise.
 
+This page assumes the current ADR-008 evaluation: raw telemetry and receipts
+stay on the customer-local edge, while the shared scorer sees only the bounded
+HMAC-minimized closure displayed in **Data Custody**.
+
 ## Channels outside the telemetry
 
 - **Uninstrumented egress.** A tool that talks to the network without
@@ -14,7 +18,8 @@ let a diagram imply otherwise.
   an MCP server that isn't traced) never enters the lineage. Provenex
   surfaces *coverage gaps* for chains it can see ending abruptly, but a
   flow that is entirely off-telemetry is invisible. Mitigation: egress
-  through the rung-3 proxy, which sees traffic regardless of spans.
+  through the customer-local reverse proxy, which sees traffic regardless of
+  whether the application emits an egress span.
 - **Side channels.** Timing, token counts, error patterns, or any covert
   channel that does not move content through an observed span.
 - **Human exfiltration.** An operator reading a screen and retyping.
@@ -26,10 +31,10 @@ let a diagram imply otherwise.
   rather than guessing (and we count honest not-covered outcomes per run), but a dropped chain is still an
   uncaught chain. Measured at 50%/10% sampling: strict recall ~0.48 vs
   ~0.62 over what survived (measured on our continuous evaluation harness).
-- **Batching races.** Evidence can arrive after the question (first-pass
-  enforcement). Bounded mitigations exist but a deployment that
-  enables neither flush-before-gate nor the PDP wait will see NotCovered
-  on first-pass requests.
+- **Post-action telemetry cannot block the same action.** Evidence can arrive
+  after the question. Inline enforcement therefore requires a pre-action
+  correlation/intent record at the reverse proxy. A normal HTTP client span
+  exported after completion remains discovery evidence only.
 
 ## Classification blind spots
 
@@ -66,6 +71,14 @@ let a diagram imply otherwise.
 - **Patient attackers across identity boundaries**: cross-agent sticky
   lookups exist, but decay tuning and cross-agent fan-out are open work
   (on the roadmap).
+- **Central availability is currently on the decision path.** The evaluation
+  cache is disabled, so every gated action needs a fresh signed judgment. A
+  scorer timeout follows the destination's configured fail-open/fail-closed
+  posture; it is not a local cache hit.
+- **Policy approval is not deployment.** The current browser records
+  reviewable suggestions and changes but does not hot-install an approved
+  policy. Enforcement claims require deployed configuration and a verified
+  digest.
 
 ## How to read a green verdict
 

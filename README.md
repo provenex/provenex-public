@@ -1,64 +1,50 @@
-# Provenex public
+# Provenex evaluation materials
 
-The public-facing assets for [Provenex](https://provenex.ai) trial customers.
+Customer-facing documentation and repository-owned synthetic fixtures for a
+Provenex evaluation.
 
-Provenex catches the class of AI-agent breach that DLP, IAM, prompt-injection classifiers, and AI-SPM tools structurally cannot see; the chain of authorized steps that adds up to a privileged action no human approved. Malicious or honest mistake, same mechanism.
+## Start here
 
-## What's in this repo
+- [`docs/onboarding.md`](docs/onboarding.md): connect a customer-local edge to
+  the common staging scorer and begin in discovery mode.
+- [`docs/install.md`](docs/install.md): install and verify the local ingestor,
+  workspace, and reverse proxy.
+- [`docs/telemetry-checklist.md`](docs/telemetry-checklist.md): supported agent,
+  HTTP, REST, RPC/gRPC, and audit-event telemetry shapes.
+- [`docs/what-provenex-cannot-see.md`](docs/what-provenex-cannot-see.md): the
+  blind-spots honesty contract.
 
-### `samples/`. sample telemetry bundle
+## Data boundary
 
-7 curated OTLP/JSON traces that customers can post against their trial endpoint to see real Red verdicts within 10 seconds of getting their API key:
+For actual customer telemetry, raw spans/events, topology, receipts, discovery
+reports, and enforcement evidence stay on the customer-local ADR-008 edge. The
+edge sends only a bounded closure containing customer-keyed HMAC tokens,
+topology, coarse resource kinds/zones, coverage, timestamps, and allowlisted
+signals to `https://provenex-verdict.fly.dev/v1/score-closure`. **Data Custody**
+shows the exact most recent outbound JSON.
 
-| # | Trace | Catches |
-|---|---|---|
-| 1 | EchoLeak (CVE-2025-32711). M365 Copilot reconstruction | `cross-zone-composition` Red/High |
-| 2 | Devin secrets leak; coding-agent reconstruction | `cross-zone-composition` Red/High (multi-egress) |
-| 3 | Slack AI exfil. PromptArmor disclosure | `cross-zone-composition` Red/High |
-| 4 | Bing-Greshake; first documented indirect prompt injection (2023) | `cross-zone-composition` Red/High |
-| 5 | Cursor NomShub; coding-agent supply chain shape (Straiker AI) | `cross-zone-composition` Red/High (×3) |
-| 6 | Delayed exfil Day 0; poisoned write | 0 Red (correct; write only) |
-| 7 | Delayed exfil Day 2; cross-batch closure | `high-risk-resource-egress` Red/High |
+Do not configure an OTel exporter, the legacy `provenex-ingest` forwarder, or a
+customer file upload to send raw telemetry to the shared scorer.
 
-Plus `try-me.sh`. a runner that posts all 7 in sequence and prints the verdict per trace.
+## Synthetic detection appendix
 
-### `docs/`. customer-facing documentation
+[`samples/`](samples/) contains 12 repository-owned attack reconstructions.
+The runner may send only those fixtures to staging with a designated demo key.
+This is a detection-only appendix: it does not use customer data and does not
+prove that a reverse proxy blocked an action.
 
-- `onboarding.md`. get from API key to real Red verdicts in 10 minutes; per-framework quickstarts for LangChain, LlamaIndex, OpenAI SDK, Anthropic SDK, Bedrock, etc.
-- `telemetry-checklist.md`. what OTel attributes to emit for best catch coverage; tiered by importance
-- `install.md`. how to install the open-source `provenex-ingest` CLI (cargo / docker / shell installer)
+The live-block proof is the installed edge rehearsal: the same denied action is
+forwarded in observe mode (HTTP 200), then withheld before upstream delivery in
+enforce mode (HTTP 403), with a signed customer-local PEP receipt.
 
-These mirror the docs served at https://signup.provenex.ai/docs/* and are kept in sync.
+## Superseded artifact
 
-## Running the sample bundle
-
-You need a trial API key (sign up at https://provenex.ai for the free 30-day trial). Then:
-
-```bash
-git clone https://github.com/provenex/provenex-public.git
-cd provenex-public/samples
-PROVENEX_API_KEY=pvx_trial_xxxxxxxxxxxxxxxxxxxxxxxxxxxx ./try-me.sh
-```
-
-You'll see 9 Red verdicts persist to your audit log in ~10 seconds. Retrieve them at any time:
-
-```bash
-curl -H "Authorization: Bearer $PROVENEX_API_KEY" \
-  https://api.provenex.ai/v1/verdicts?limit=20
-```
-
-## What's NOT in this repo
-
-The Provenex engine itself; the closure walker, archetype catalogue, policy engine, classification heuristics. That stays server-side at `api.provenex.ai`. The open-source customer-side ingestor lives at [provenex/provenex-ingest](https://github.com/provenex/provenex-ingest).
-
-## License
-
-Apache 2.0; see [LICENSE](LICENSE).
-
-## Contributing
-
-Issues and PRs welcome on the bundled samples + docs. Bug reports on the engine itself should go through your trial dashboard's "Report an issue" link.
+The public `provenex-ingest` source mirror predates ADR-008 and forwards raw or
+partially redacted telemetry centrally. It is retained for historical review,
+not for current customer evaluations. Use the installer-provisioned
+`provenex-edge` bundle instead.
 
 ## Security
 
-Disclosures: security@provenex.ai. We acknowledge within 1 business day and follow [security.txt](https://provenex.ai/.well-known/security.txt).
+Never put customer keys or payloads in issues. Send security disclosures to
+security@provenex.ai.

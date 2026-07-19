@@ -1,16 +1,25 @@
 # Telemetry checklist: what to emit for best results
 
-A short, actionable checklist for customers integrating Provenex. Tiered by how much catching power each piece unlocks. Most customers using a modern agent framework (LangChain, LlamaIndex, OpenAI Assistants, Anthropic SDK, LangGraph, Mastra) emit enough of this **by default** to get full value; but the checklist makes it explicit so security teams can verify before running an eval.
+A short, actionable checklist for customers integrating Provenex. Tiered by how much catching power each piece unlocks. Most customers using a modern agent framework (LangChain, LlamaIndex, OpenAI Assistants, Anthropic SDK, LangGraph, Mastra) emit enough of this **by default** to get useful discovery; the checklist makes coverage explicit so security teams can verify it before an evaluation.
+
+All actual customer telemetry goes to the customer-local ADR-008 edge. Do not
+point an exporter at the shared scorer. The edge keeps raw telemetry and sends
+only the exact HMAC-minimized scoring closure shown in **Data Custody**.
 
 ## TL;DR: minimum viable telemetry
 
-If you can answer **yes** to these three, you're ready to send Provenex your telemetry and see real Red verdicts:
+If you can answer **yes** to these three, you're ready to import telemetry into
+your local Provenex workspace and begin discovery:
 
 - [ ] Your agent emits OpenTelemetry traces (any of the listed shapes below)
 - [ ] Each span carries `trace_id` and `span_id`
 - [ ] The chain of `parent_span_id` from the agent's output back to its inputs is reconstructable
 
-Almost any modern agent framework with OpenTelemetry instrumentation passes this bar. **If you're not sure, just send us a sample trace; we'll run it through `provenex-scan` and tell you what's in it.**
+Almost any modern agent framework with OpenTelemetry instrumentation passes
+this bar. Traditional HTTP, REST, and RPC/gRPC services also work when spans
+carry stable identity, operation, destination, and parentage fields. If you're
+not sure, import an approved sample into the local workspace or run
+`provenex-scan` locally; do not email a customer trace or send it to staging.
 
 ---
 
@@ -67,7 +76,7 @@ Each of these unlocks a specific catch class. Order matters; first ones first.
 | `enduser.id` (or `user.id` / `gen_ai.user.id`) | **Actor identity** for Phase B risk accumulation across sessions. Required for cross-agent sticky-risk propagation. Phase D (cross-agent fan-out catching the "Alice's ChatGPT activity elevates her in-house agent") needs this. |
 | `gen_ai.agent.name` | Agent topology; drives latent-attack-path BFS. Without it, the latent path enumerator can still surface topology, but agent attribution is `agent://<service.name>`. |
 | `service.name` | Multi-service deployments; disambiguates two agents under the same `agent.name`. |
-| `data.zone` on tool spans (SDK-emitted) | **Authoritative trust-zone declaration on the SPAN itself**, in addition to the `trust_zones.yaml` URL-pattern resolver. Values are kebab-case: `untrusted-external`, `internal`, `privileged-pii`, `external-egress`, `privileged-action`. When the SDK declares this, it WINS over any URL-pattern catch-all (`tool://*` → internal, `model://*` → internal, etc.) that would otherwise classify the span as infrastructure noise. Without it, framework wrapper spans + LLM-call spans collapse to `tool://*` / `model://*` catch-alls and get classified as internal-data sources, which over-fires `internal-egress` on every LLM-driven agent reply. With it, the engine knows which calls operate on real internal data vs. which are framework transformations. Stamp it in your tool wrapper at span creation; ask us for the reference wrapper implementation. |
+| `data.zone` on tool spans (SDK-emitted) | **Trust-zone hint on the span itself**, alongside the `trust_zones.yaml` resolver. Values are kebab-case: `untrusted-external`, `internal`, `privileged-pii`, `external-egress`, `privileged-action`. It is honored only from a `service.name` listed under `sdk_zone_authorities`, can raise suspicion or suppress a framework catch-all, and never overrides an independently riskier PII/egress/untrusted classification. Because it is self-reported, it caps confidence at `Inferred`. See the reference tool wrapper before emitting it. |
 
 ### Tier 3. High-fidelity signals (vendor-specific: pass through automatically)
 
@@ -88,29 +97,33 @@ If your stack carries these, the engine surfaces them as first-class signals. No
 
 ## Pre-flight check before evaluation
 
-Before pointing your traces at Provenex's trial endpoint, sanity-check your telemetry shape:
+Before pointing a live exporter at the customer-local edge, sanity-check the
+telemetry shape:
 
 ```bash
-# Pipe a sample OTLP/JSON file from your collector to scan locally
-curl https://provenex.ai/static/preflight.sh | bash -s your-trace.otlp.json
-# (roadmap: script is the wrapper around `provenex-scan` that produces
-#  the Step-0 qualification report without sending anything to us.)
+# Run the repository scanner locally; no customer bytes leave the machine.
+provenex-scan --json your-trace.otlp.json
 ```
 
-Or just send the file and inspect the response:
+Or import an approved file into the running local edge and inspect its report:
 
 ```bash
-curl -X POST https://api.provenex.ai/v1/receipts \
-  -H "Authorization: Bearer pvx_trial_xxx" \
+curl -fsS -X POST http://127.0.0.1:4318/v1/traces \
+  -H "Authorization: Bearer $PROVENEX_EDGE_API_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary @your-trace.otlp.json
+
+curl -fsS \
+  -H "Authorization: Bearer $PROVENEX_EDGE_API_TOKEN" \
+  http://127.0.0.1:18080/report
 ```
 
-The response carries `receipts_ingested` (egress points evaluated) and `red_verdicts`. If `receipts_ingested` is 0:
+The ingest response carries `receipts_ingested`; the local report carries
+evaluated egress and coverage. If `receipts_ingested` is 0:
 
 - Your trace has no egress-shaped spans. Provenex needs at least one `execute_tool` or `http`-shaped destination span to evaluate against. Confirm your collector is exporting tool / HTTP spans, not just LLM chat spans.
 
-If `receipts_ingested > 0` but `red_verdicts = 0`:
+If receipts ingest but the local report has no Red finding:
 
 - Either your traces are genuinely clean (good!) or upstream lineage is broken. Check `parent_span_id` chains via your APM. The 4 lineage-recovery mechanisms handle most broken-chain cases but they degrade confidence from `Confirmed` to `Inferred`.
 
@@ -118,7 +131,10 @@ If `receipts_ingested > 0` but `red_verdicts = 0`:
 
 ## What we DON'T need
 
-- **Prompt content for catches.** Provenex evaluates structural composition; content is hashed if you're running the open-source `provenex-ingest-proxy` in hash mode, and not used for catching either way. Sending prompts is fine for trial-launch (we don't read them); the hash-only mode is for security-team-mandated zero-content-leaving environments.
+- **Prompt content at the central scorer.** Provenex evaluates structural
+  composition locally. Prompts and tool bodies may remain in the local
+  workspace when the customer's own policy permits, but they are removed from
+  the ADR-008 scoring DTO and must never appear in **Data Custody**.
 - **Custom instrumentation.** If your existing OpenTelemetry / framework instrumentation isn't enough, the gap is usually a missing OTLP exporter on your collector, not a Provenex requirement.
 - **A trust_zones.yaml at signup.** The engine auto-classifies via the heuristic discovery overlay. You can author one later to tune classifications; the trial works without it.
 
@@ -147,7 +163,6 @@ Common frameworks and their out-of-box telemetry shape; useful for confirming wh
 | Framework | Default shape | Default OTel-GenAI compatible? |
 |---|---|---|
 | LangChain (with `opentelemetry-instrumentation-langchain` or LangSmith→OTLP) | OpenInference + custom langchain spans | Yes |
-| LlamaIndex (with `llama-index-instrumentation-otel`) | OpenInference | Yes |
 | LangGraph | OpenInference + langgraph metadata | Yes |
 | OpenAI Assistants (with `openai-instrumentation`) | OpenInference | Yes |
 | Anthropic SDK direct | Manual + `anthropic-instrumentation` (community) | Partial; depends on collector config |
@@ -159,7 +174,8 @@ Common frameworks and their out-of-box telemetry shape; useful for confirming wh
 | Datadog LLM Observability (dd-trace) | `_dd.llmobs.*` | Needs converter |
 | LangFuse / Phoenix | Native (OpenInference under the hood) | Yes |
 
-If your framework isn't listed, **send us a sample trace**. we'll tell you what's in it and what's missing.
+If your framework is not listed, import an approved sample into the local
+workspace and share the qualification summary, not the raw trace.
 
 ---
 
@@ -169,7 +185,11 @@ If your framework isn't listed, **send us a sample trace**. we'll tell you what'
 2. **`parent_span_id` is empty on root spans**. that's expected (every trace has one root). The engine handles roots correctly; the recovery mechanisms only engage when an intermediate span has missing/broken parent links.
 3. **LangChain → OpenAI SDK does NOT propagate context cleanly**. the chat span looks like a sibling, not a child, of the agent invocation. Provenex's cross-emitter LLM stitcher handles this; you don't need to fix it client-side.
 4. **Sampling will break you.** If your collector is configured to sample 10% of traces, Provenex sees a 10% subset and the closure walker can miss the cross-batch hops. Provenex is the consumer that needs **100% sampling**. If you can't do 100% globally, configure your sampler to send 100% of GenAI traces.
-5. **Sensitive content in resource URIs.** If your `gen_ai.data_source.id` is `outlook://mailbox/alice@acme.com/inbox/. .`, then "Alice's email" reaches Provenex inside the resource URI. The hash-only mode redacts content fields but NOT resource URIs (because those drive classification). Either (a) hash the local-part client-side before instrumentation, or (b) use the `provenex-ingest` forwarder's redaction patterns when the per-customer pattern flag ships (on the roadmap; the field list is fixed today).
+5. **Sensitive content in resource URIs.** If your `gen_ai.data_source.id` is
+   `outlook://mailbox/alice@acme.com/inbox/. .`, the raw value remains in the
+   customer-local receipt store. The scorer receives only its customer-keyed
+   HMAC token. Apply local retention/redaction controls as needed and verify the
+   exact outbound DTO in **Data Custody** before enforcement.
 
 ---
 
@@ -183,16 +203,17 @@ Every Provenex scan emits a **Step-0 qualification verdict** that names what the
 - `NotEvaluableAdapterEmpty`. zero receipts produced; check that the body is OTLP JSON
 - `NotEvaluableAdapterMissing`. ≥80% of receipts fell to `span://<hex>` synthetic IDs; tell us your framework
 
-These appear in `/v1/receipts` responses (a dashboard surface for them is on the roadmap); for now, use `provenex-scan` against a sample file locally to get the full readout before integration.
+These appear in the customer-local report. Use `provenex-scan` against a sample
+file locally for the full readout before integration.
 
 ---
 
 ## Quick links
 
-- [Onboarding guide](onboarding-trial.md)
-- [Open-source ingest proxy (hash mode)](ingest-proxy.md)
-- [What the engine catches and why](how-provenex-catches.md)
-- [The full architectural reference](../README.md) (§"What telemetry Provenex expects")
+- [Onboarding guide](onboarding.md)
+- [Install the customer-local edge](install.md)
+- [What Provenex cannot see](what-provenex-cannot-see.md)
+- [Evaluation architecture](../README.md)
 
 ## If you run SaaS agents only (no in-house agent code)
 
@@ -236,8 +257,9 @@ chains and no egress spans. Here is what that buys today and how to get more.
 - **Agentforce specifically:** session-tracing events are richer than
   plain audit logs but use Salesforce's own schema; a native adapter is on
   our roadmap, and audit exports work today.
-- **To get the most:** (1) send us the platform's audit/activity export on
-  a schedule (a daily file drop is enough to start), (2) put outbound
+- **To get the most:** (1) import the platform's approved audit/activity export
+  into the local edge on a schedule (a daily file drop is enough to start), (2)
+  put outbound
   email/webhook egress behind the proxy where the platform allows custom
   SMTP/relay or webhook endpoints, (3) ask us for the adapter request
   bundle if your platform's export is not recognized: we turn unknown
@@ -289,8 +311,8 @@ How to export:
    Platform retains 30 days, so schedule a recurring pull and keep your
    own archive.
 
-**With Provenex:** we have a native ChatGPT Enterprise audit adapter;
-point your scheduled pull at us (or drop the JSON files) and the
+**With Provenex:** we have a native ChatGPT Enterprise audit adapter; import
+scheduled JSON files into the customer-local edge and the
 audit-shape findings described earlier in this section light up.
 
 ### Claude (Anthropic)
@@ -346,8 +368,9 @@ gating, so verify in your admin console that your plan includes them.
    assistant activity is surfaced separately; verify in your admin
    console which activity exports your plan includes.
 
-**With Provenex:** the Glean audit shape is supported; send the CSV
-export or the SIEM stream and we model it like the other SaaS agents.
+**With Provenex:** the Glean audit shape is supported; import the CSV export or
+route the approved SIEM stream to the customer-local edge and we model it like
+the other SaaS agents.
 
 ### Microsoft Copilot (Purview audit)
 
@@ -412,8 +435,16 @@ re-check your admin console before relying on a specific limit.
 
 ### Continuous monitoring (not just one-time exports)
 
-The how-tos above produce a file; monitoring should not stop there. What works today with the public provenex-ingest binary (see its built-in help for full flags):
+The how-tos above produce a file; monitoring should not stop there:
 
-- **Live span sources** (Claude Code OTel, your own instrumented agents): run `provenex-ingest listen --bind addr:port` as an OTLP/HTTP receiver and point your OTel Collector at it. Continuous by construction, and concurrent: any number of agents or Collectors can post to one listener (spans carry their own service and trace identity). One listener instance serves one tenant (one api key and HMAC salt); run one instance per tenant if you have several. Supports --mode hash so content is HMAC-hashed before leaving your environment.
-- **Audit-log sources** (ChatGPT, Claude Enterprise, Glean, Purview, Agentforce): schedule the vendor-side export on a cron into a drop directory and run `provenex-ingest watch <dir/> --interval N` (idempotent; already-processed files are tracked). Exports need to be OTLP-shaped when dropped; recognized audit formats have converters, and the scan output names the converter when a format is detected. You get verdicts continuously at your export cadence.
-- **Native vendor pollers** (Provenex pulling the Compliance API, Purview, or Glean APIs for you on a schedule, no cron on your side): not shipped yet. Email skulk@provenex.ai and we will set up live audit monitoring with you and prioritize your platform.
+- **Live span sources** (Claude Code OTel, traditional services, and your own
+  agents): point the existing OTel Collector's OTLP/HTTP exporter at the local
+  edge `/v1/traces` receiver with the local bearer token. Keep existing APM
+  exporters in the same pipeline.
+- **Audit-log sources** (ChatGPT, Claude Enterprise, Glean, Purview,
+  Agentforce): schedule the vendor export into a customer-controlled drop
+  location and import it through the supported local adapter. The current UI
+  supports approved files; continuous connector pullers are integration work.
+- **Native vendor pollers** (Provenex pulling Compliance, Purview, or Glean APIs
+  centrally): not shipped. Do not give central staging a vendor credential as a
+  workaround.

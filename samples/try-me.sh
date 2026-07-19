@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
-# Provenex trial; sample telemetry runner.
+# Provenex synthetic, detection-only sample runner.
 #
-# After signing up at https://provenex.ai/trial you'll get an email with
-# your API key. Set it as PROVENEX_API_KEY (env var or pass on the
-# command line), then run this script to post 12 curated OTLP/JSON
-# traces and see what Provenex catches.
+# This script may send only the 12 repository-owned fixtures beside it to the
+# shared staging API. Never adapt it to accept a customer file. Actual customer
+# telemetry belongs on the customer-local ADR-008 edge.
 #
 # Each trace is a reconstruction of a named, publicly disclosed
 # production AI-agent breach (through January 2026) plus a two-trace
 # patient-attacker scenario showing cross-batch lineage.
 #
 # Usage:
-#   PROVENEX_API_KEY=pvx_trial_... ./try-me.sh
-#   # or
-#   ./try-me.sh pvx_trial_...
+#   PROVENEX_DEMO_API_TOKEN=pvx_trial_... \
+#   PROVENEX_DEMO_ALLOW_SYNTHETIC_CENTRAL=1 ./try-me.sh
 
-set -u
+set -euo pipefail
 
-KEY="${PROVENEX_API_KEY:-${1:-}}"
-URL="${PROVENEX_API_URL:-https://api.provenex.ai}"
+KEY="${PROVENEX_DEMO_API_TOKEN:-}"
+URL="${PROVENEX_DEMO_ENGINE_URL:-https://provenex-verdict.fly.dev}"
 
 if [[ -z "$KEY" ]]; then
-  echo "error: set PROVENEX_API_KEY (env or arg)" >&2
-  echo "       see your trial signup email for the value" >&2
+  echo "error: set PROVENEX_DEMO_API_TOKEN to a designated demo trial key" >&2
+  exit 1
+fi
+if [[ "${PROVENEX_DEMO_ALLOW_SYNTHETIC_CENTRAL:-}" != "1" ]]; then
+  echo "error: this sends repository-owned synthetic fixtures centrally" >&2
+  echo "       set PROVENEX_DEMO_ALLOW_SYNTHETIC_CENTRAL=1 to acknowledge" >&2
+  echo "       never use this runner for customer telemetry" >&2
   exit 1
 fi
 
@@ -32,6 +35,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Overridable via PROVENEX_REPORTS_DIR=... if you want a different path.
 REPORTS_DIR="${PROVENEX_REPORTS_DIR:-$SCRIPT_DIR/reports}"
 mkdir -p "$REPORTS_DIR"
+
+HEALTH_FILE="$(mktemp)"
+trap 'rm -f "$HEALTH_FILE"' EXIT
+HEALTH_STATUS="$(curl -sS -o "$HEALTH_FILE" -w '%{http_code}' \
+  -H "Authorization: Bearer $KEY" "$URL/v1/health/key")"
+case "$HEALTH_STATUS" in
+  200) ;;
+  401) echo "error: demo key is unknown or revoked (HTTP 401)" >&2; exit 1 ;;
+  402) echo "error: demo trial is expired (HTTP 402)" >&2; exit 1 ;;
+  *) echo "error: staging key health returned HTTP $HEALTH_STATUS" >&2; exit 1 ;;
+esac
+python3 - "$HEALTH_FILE" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    health = json.load(handle)
+if not re.fullmatch(r"[0-9a-f]{64}", health.get("verdict_verify_pubkey_hex", "")):
+    raise SystemExit("error: staging key health omitted a valid scorer public key")
+print("staging credential: authorized and unexpired")
+PY
 
 # Pass --no-report on the command line to skip HTML rendering entirely.
 # Otherwise render-verdict.py (sitting alongside this script) is invoked
@@ -57,7 +82,7 @@ post() {
   printf "  expected: %s\n" "$expected"
   printf "──────────────────────────────────────────────────────\n"
 
-  curl -s -X POST "$URL/v1/receipts" \
+  curl -fsS -X POST "$URL/v1/receipts" \
     -H "Authorization: Bearer $KEY" \
     -H "Content-Type: application/json" \
     --data-binary "@$SCRIPT_DIR/$fixture" \
@@ -108,15 +133,14 @@ else:
 cat <<'BANNER'
 
 ╔══════════════════════════════════════════════════════════════════╗
-║  Provenex trial; sample telemetry runner                         ║
+║  Provenex synthetic detection appendix                          ║
 ║                                                                  ║
 ║  12 reconstructions of named production AI-agent breaches        ║
 ║  disclosed through January 2026, plus a 2-trace patient-attacker ║
 ║  scenario showing cross-batch lineage.                           ║
 ║                                                                  ║
-║  Each block posts one OTLP trace to your trial endpoint and      ║
-║  reports what Provenex caught. Expected outcomes are noted so    ║
-║  you can match against reality.                                  ║
+║  Repository-owned fixtures only; no customer telemetry.          ║
+║  Retrospective detection only; this does not prove a live block. ║
 ╚══════════════════════════════════════════════════════════════════╝
 BANNER
 
@@ -169,7 +193,7 @@ post "12_delayed_exfil_day2_egress.otlp.json" \
   "Red, high-risk-resource-egress / high; cross-batch lineage walks back to the Day 0 write; the patient-attacker shape no UEBA can see"
 
 printf "\n──────────────────────────────────────────────────────\n"
-printf "  Done. Verdicts persisted to your audit log.\n\n"
+printf "  Done. Synthetic verdicts persisted to the demo audit log.\n\n"
 if [ "$RENDER_HTML" = "1" ]; then
   printf "  HTML reports + raw JSON written to:\n"
   printf "    %s/\n\n" "$REPORTS_DIR"
@@ -178,9 +202,9 @@ if [ "$RENDER_HTML" = "1" ]; then
   printf "    xdg-open %s/01_echoleak_breach.html   # linux\n\n" "$REPORTS_DIR"
 fi
 printf "  Retrieve the full audit log at any time:\n\n"
-printf "    curl -H \"Authorization: Bearer \$PROVENEX_API_KEY\" \\\\\n"
+printf "    curl -H \"Authorization: Bearer \$PROVENEX_DEMO_API_TOKEN\" \\\\\n"
 printf "      $URL/v1/verdicts?limit=20 | python3 -m json.tool\n\n"
-printf "  Trial expires 30 days from your signup.\n"
+printf "  Actual customer telemetry must go to the customer-local edge.\n"
 printf "  Onboarding doc: https://signup.provenex.ai/docs/onboarding\n"
 printf "  Questions / feedback: skulk@provenex.ai\n"
 printf "──────────────────────────────────────────────────────\n"
