@@ -5,10 +5,10 @@ Provenex evaluation.
 
 ## Start here
 
-- [`docs/onboarding.md`](docs/onboarding.md): connect a customer-local edge to
-  the common staging scorer and begin in discovery mode.
-- [`docs/install.md`](docs/install.md): install and verify the local ingestor,
-  workspace, and reverse proxy.
+- [`docs/onboarding.md`](docs/onboarding.md): the single public end-to-end
+  evaluation path, from connection and discovery through reviewed enforcement.
+- [`docs/install.md`](docs/install.md): scoped installation and component
+  reference for the local ingestor, workspace, and reverse proxy.
 - [`docs/telemetry-checklist.md`](docs/telemetry-checklist.md): supported agent,
   HTTP, REST, RPC/gRPC, and audit-event telemetry shapes.
 - [`docs/what-provenex-cannot-see.md`](docs/what-provenex-cannot-see.md): the

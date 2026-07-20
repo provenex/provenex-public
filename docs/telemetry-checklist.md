@@ -105,11 +105,12 @@ telemetry shape:
 provenex-scan --json your-trace.otlp.json
 ```
 
-Or import an approved file into the running local edge and inspect its report:
+Or import an approved file into the direct customer-local receiver generated
+during installation and inspect its response headers and local report:
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:4318/v1/traces \
-  -H "Authorization: Bearer $PROVENEX_EDGE_API_TOKEN" \
+curl -i -X POST "$PROVENEX_EDGE_INGEST_URL" \
+  -H "Authorization: Bearer $PROVENEX_INGEST_API_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary @your-trace.otlp.json
 
@@ -118,8 +119,11 @@ curl -fsS \
   http://127.0.0.1:18080/report
 ```
 
-The ingest response carries `receipts_ingested`; the local report carries
-evaluated egress and coverage. If `receipts_ingested` is 0:
+The protocol-correct success body is `{}`. The
+`x-provenex-receipts-ingested` response header carries the normalized receipt
+count and `x-provenex-custody` identifies the custody boundary; neither claims a
+verdict. The local report carries evaluated egress and coverage. If
+`x-provenex-receipts-ingested` is 0:
 
 - Your trace has no egress-shaped spans. Provenex needs at least one `execute_tool` or `http`-shaped destination span to evaluate against. Confirm your collector is exporting tool / HTTP spans, not just LLM chat spans.
 
@@ -131,10 +135,11 @@ If receipts ingest but the local report has no Red finding:
 
 ## What we DON'T need
 
-- **Prompt content at the central scorer.** Provenex evaluates structural
-  composition locally. Prompts and tool bodies may remain in the local
-  workspace when the customer's own policy permits, but they are removed from
-  the ADR-008 scoring DTO and must never appear in **Data Custody**.
+- **Prompt content at the central scorer.** The customer-local Edge reconstructs
+  lineage and builds the bounded closure; the hosted scorer evaluates only that
+  minimized closure. Prompts and tool bodies may remain in the local workspace
+  when the customer's own policy permits, but they are not fields in the
+  ADR-008 scoring DTO and must never appear in **Data Custody**.
 - **Custom instrumentation.** If your existing OpenTelemetry / framework instrumentation isn't enough, the gap is usually a missing OTLP exporter on your collector, not a Provenex requirement.
 - **A trust_zones.yaml at signup.** The engine auto-classifies via the heuristic discovery overlay. You can author one later to tune classifications; the trial works without it.
 
@@ -200,7 +205,9 @@ Every Provenex scan emits a **Step-0 qualification verdict** that names what the
 - `Evaluable`. telemetry has the shape the engine can walk; full catch surface eligible
 - `PartialEvaluable`. spans parsed but resources unresolved; **needs an adapter or a missing kind attribute**
 - `BareLlm`. no structural shape to evaluate (just chat spans, no tools); per-prompt classifiers are the right tool here
-- `NotEvaluableAdapterEmpty`. zero receipts produced; check that the body is OTLP JSON
+- `NotEvaluableAdapterEmpty`. zero receipts produced; check that the body is
+  OTLP JSON or an OTLP protobuf `ExportTraceServiceRequest` with the matching
+  `Content-Type`
 - `NotEvaluableAdapterMissing`. ≥80% of receipts fell to `span://<hex>` synthetic IDs; tell us your framework
 
 These appear in the customer-local report. Use `provenex-scan` against a sample
@@ -225,11 +232,12 @@ chains and no egress spans. Here is what that buys today and how to get more.
 
 ### ChatGPT (Enterprise) today
 
-- **Out of the box:** we ingest the ChatGPT Enterprise Compliance/audit
-  export with a native adapter. You get: who used which tools/GPTs against
-  which connectors, latent risky tool combinations (sensitive read +
-  external send capability in one assistant), and a Detection Readiness
-  report saying exactly what is provable.
+- **Local adapter available:** the `provenex-scan` operator path can scan a
+  ChatGPT Enterprise Compliance/audit export into an in-memory receipt graph
+  and local report. That adapter is not wired to the Edge browser importer and
+  does not emit OTLP for later Edge import. The local report shows who used
+  which tools/GPTs against which connectors, latent risky tool combinations,
+  and a Detection Readiness section saying exactly what is provable.
 - **Not provable from audit events alone:** end-to-end exfil chains (no
   parent links to walk). Verdicts stay honestly labeled as inferred or
   not covered rather than silently green.
@@ -242,24 +250,25 @@ chains and no egress spans. Here is what that buys today and how to get more.
 - **Claude Code:** native OpenTelemetry export (opt-in env vars). This is
   real span telemetry; point it at your collector and Provenex ingests it
   directly. Best-supported SaaS coding agent today.
-- **Claude API / Claude Enterprise:** admin audit logs only; same
-  audit-shape support and limits as ChatGPT above. If your team builds
-  anything on the Claude API, one instrumentation library (OpenLLMetry or
-  OpenInference) upgrades you to full chain telemetry.
+- **Claude API / Claude Enterprise:** supported admin audit logs can be scanned
+  separately with the customer-local CLI adapter; that path does not feed the
+  Edge. They have the same audit-shape limits as ChatGPT above. If your team
+  builds anything on the Claude API, one
+  instrumentation library (OpenLLMetry or OpenInference) upgrades you to full
+  chain telemetry.
 
 ### Sales/GTM SaaS agents (Apollo, Artisan, Agentforce, and similar)
 
-- **Out of the box:** audit/activity exports from these platforms ingest
-  via the audit-event path where an export exists. You get inventory and
-  latent-composition findings: which agents can read CRM data AND send
-  external email, who triggered what, sequence-level anomalies
-  (export-then-send patterns).
-- **Agentforce specifically:** session-tracing events are richer than
-  plain audit logs but use Salesforce's own schema; a native adapter is on
-  our roadmap, and audit exports work today.
-- **To get the most:** (1) import the platform's approved audit/activity export
-  into the local edge on a schedule (a daily file drop is enough to start), (2)
-  put outbound
+- **Where a local adapter exists:** the operator can scan its supported
+  audit/activity shape customer-locally into a report. The Edge browser does
+  not auto-detect these files, and the adapter does not produce importable OTLP.
+  The local report can provide inventory and latent-composition findings such
+  as who can read CRM data and send external email.
+- **Agentforce specifically:** session-tracing events use Salesforce's own
+  schema and remain roadmap work. The supported Salesforce Event Monitoring
+  shape has a local CLI adapter, not direct Edge browser import.
+- **To get the most:** (1) keep the scheduled audit/activity export in a
+  customer-controlled drop and run the reviewed local adapter, (2) put outbound
   email/webhook egress behind the proxy where the platform allows custom
   SMTP/relay or webhook endpoints, (3) ask us for the adapter request
   bundle if your platform's export is not recognized: we turn unknown
@@ -268,24 +277,36 @@ chains and no egress spans. Here is what that buys today and how to get more.
 ### Knowledge/search agents (Glean and similar)
 
 Glean-class assistants sit on connectors into your most sensitive corpora
-(Drive, Slack, Jira, tickets) and can act on them, which makes them the
-highest-value audit-log source we ingest. We model these the same way as
-other SaaS agents: audit events in, latent cross-corpus exposure paths and
-permission-drift findings out; chain-level proof requires egress
-visibility, same as above.
+(Drive, Slack, Jira, tickets), making their audit logs a high-value candidate.
+Native Glean CSV has no adapter or packaged converter today, so do not claim
+findings from that file until a reviewed local mapping exists. If a future
+converter produces canonical OTLP, the same audit-shape and egress-visibility
+limits will apply.
 
 ### The general rule
 
-Run one scan on whatever export you have today. The report's Detection
-Readiness section tells you, per detection class, what your current
-telemetry supports and the exact instrumentation or routing change that
-unlocks the next class. You never have to guess what to instrument.
+Run one customer-local adapter/scan on a supported export. If its native format
+is not recognized, Provenex reports the adapter gap instead of pretending the
+file was evaluated. The report's Detection Readiness section tells you, per
+detection class, what the normalized telemetry supports and the exact
+instrumentation or routing change that unlocks the next class.
 
 ## How to export audit logs from your SaaS agent platforms
 
 Concrete, verified steps per platform: whether the telemetry exists by
 default or an admin must turn it on, what plan it is gated on, and how to
 get the export out.
+
+**Current Edge/UI boundary:** `/v1/traces` and **Import telemetry history**
+accept canonical OTLP JSON/JSONL (or OTLP protobuf on the receiver), not native
+vendor audit JSON/CSV. The repository has local CLI/library scanners for several
+named sources below, but they are not dispatched by the Edge browser import and
+do not emit OTLP for re-import. Those sources can be assessed in a separate
+customer-local `provenex-scan --format <vendor>` run. Loading one into the Edge
+requires a separate, reviewed converter that emits canonical OTLP; such a
+converter is not packaged for these audit adapters. Glean native CSV has neither
+an adapter nor a converter. These export steps are collection guidance, not a
+promise that every file can be dropped directly into the UI.
 
 ### ChatGPT Enterprise (OpenAI Compliance API)
 
@@ -311,9 +332,9 @@ How to export:
    Platform retains 30 days, so schedule a recurring pull and keep your
    own archive.
 
-**With Provenex:** we have a native ChatGPT Enterprise audit adapter; import
-scheduled JSON files into the customer-local edge and the
-audit-shape findings described earlier in this section light up.
+**With Provenex:** a native ChatGPT Enterprise audit adapter exists in the local
+CLI/library scan path. Edge browser dispatch is not wired in this release, and
+the adapter produces an in-memory report rather than OTLP for Edge import.
 
 ### Claude (Anthropic)
 
@@ -344,9 +365,9 @@ environment variables; available wherever Claude Code runs.
 4. Fleet-wide: put the same `env` block in Claude Code's managed
    settings file so every developer exports without per-user setup.
 
-**With Provenex:** Claude Code OTel is real span/event telemetry and
-ingests directly (best-supported SaaS coding agent today). Claude
-Enterprise audit exports ingest via the audit-event path.
+**With Provenex:** Claude Code OTel is real span/event telemetry and ingests
+directly. A Claude Enterprise audit adapter exists in the local CLI/library
+path, but native audit JSON/CSV does not go directly to the Edge browser import.
 
 ### Glean
 
@@ -368,9 +389,9 @@ gating, so verify in your admin console that your plan includes them.
    assistant activity is surfaced separately; verify in your admin
    console which activity exports your plan includes.
 
-**With Provenex:** the Glean audit shape is supported; import the CSV export or
-route the approved SIEM stream to the customer-local edge and we model it like
-the other SaaS agents.
+**With Provenex:** native Glean CSV is not supported by the current Edge or
+adapter library. Keep the export customer-side; a reviewed mapping/conversion is
+integration work before it can be imported.
 
 ### Microsoft Copilot (Purview audit)
 
@@ -399,9 +420,9 @@ billing.
    `AccessedResources` (with sensitivity label IDs) and the
    `XPIADetected` flag.
 
-**With Provenex:** the M365 Copilot audit feed is what powers the
-high-fidelity Copilot signals listed in Tier 3 above, including the
-XPIA (EchoLeak-class) detection flag.
+**With Provenex:** the local M365 Copilot adapter maps the high-fidelity signals
+listed in Tier 3, including the XPIA flag. It is a local CLI/library path today;
+native Purview CSV is not accepted directly by the Edge browser import.
 
 ### Salesforce Agentforce
 
@@ -423,9 +444,9 @@ Salesforce Shield (or standalone Event Monitoring) add-on.
    add-on; verify in your admin console.
 4. Schedule the export; a daily file drop is enough to start.
 
-**With Provenex:** Agentforce audit/event exports work today via the
-audit-event path; a native adapter for the session-tracing schema is on
-our roadmap.
+**With Provenex:** the local Salesforce event adapter handles the supported
+audit/event shape. It is not dispatched by the Edge browser import, and a native
+adapter for the Agentforce session-tracing schema remains roadmap work.
 
 ---
 
@@ -443,8 +464,10 @@ The how-tos above produce a file; monitoring should not stop there:
   exporters in the same pipeline.
 - **Audit-log sources** (ChatGPT, Claude Enterprise, Glean, Purview,
   Agentforce): schedule the vendor export into a customer-controlled drop
-  location and import it through the supported local adapter. The current UI
-  supports approved files; continuous connector pullers are integration work.
+  location. Supported formats can be assessed in a separate local CLI scan;
+  those adapters do not feed the Edge. The current UI accepts canonical OTLP
+  only, Glean native CSV has no adapter or converter, and continuous connector
+  pullers are integration work.
 - **Native vendor pollers** (Provenex pulling Compliance, Purview, or Glean APIs
   centrally): not shipped. Do not give central staging a vendor credential as a
   workaround.
