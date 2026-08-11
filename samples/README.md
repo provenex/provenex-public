@@ -1,7 +1,9 @@
 # Synthetic attack-reconstruction appendix
 
-These 12 repository-owned OTLP fixtures are safe to send to staging as a
-clearly labeled detection appendix. They contain no customer telemetry.
+This runner contains ten repository-authored OTLP reconstructions based on
+public disclosures plus a two-trace synthetic delayed-exfil scenario. These 12
+fixtures are safe to send to staging as a clearly labeled detection appendix.
+They contain no customer telemetry and are not captures from the named vendors.
 
 They do **not** prove live blocking: `/v1/receipts` evaluates a completed
 synthetic trace and persists the result to the selected demo tenant. The
@@ -49,23 +51,38 @@ artifacts go under the gitignored `reports/` directory by default.
 Traces 11 and 12 must run in order against the same demo tenant to demonstrate
 the cross-batch join. Running either trace alone is not that proof.
 
+## Related engine evidence
+
+The default runner stays focused on the current ten-case disclosure pack. A
+separate older engine regression suite also covers Slack AI, Devin's
+secrets-leak shape, and Bing-Greshake, along with EchoLeak and Cursor NomShub.
+After removing those two overlaps, the suites cover 13 unique named public
+shapes.
+
+Those are disclosure-based telemetry reconstructions, not vendor captures or
+proof that a vendor remains vulnerable. AgentDojo is separate benchmark
+evidence, not an incident, and the engine's 18 latent-path playbooks are
+discovery hypotheses, not 18 additional breach samples.
+
 ## What this appendix proves
 
-- The engine recognizes structural composition shapes across a set of curated
-  attack reconstructions.
+- The engine recognizes the modeled structural composition across this set of
+  curated reconstructions.
 - Intent is not required: the same primitive can catch malicious steering and
   honest mistakes.
 - Cross-batch detection can join a later egress to an earlier poisoned write.
 
-It does not establish production prevalence, customer-specific coverage, or
-inline enforcement. Use Discovery against approved customer-local telemetry to
-establish topology and coverage, and use the reverse-proxy safe rehearsal for
-the live-block claim.
+It does not establish production prevalence, customer-specific coverage,
+another control's result, an executed exploit, or inline enforcement. A Red
+result here is a retrospective policy finding, not a block receipt. Use
+Discovery against approved customer-local telemetry to establish topology and
+coverage, and use the reverse-proxy safe rehearsal for the live-block claim.
 
 ## Credential failures
 
 - HTTP 401: the demo key is unknown or revoked.
 - HTTP 402: the trial expired even if the key remains unrevoked.
+- HTTP 403: the key or tenant is inactive or revoked.
 - Missing/invalid scorer public key: stop; the expected ADR-008-capable staging
   service is not ready.
 

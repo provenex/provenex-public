@@ -1,5 +1,5 @@
 {
-  "_comment": "Delayed-exfil scenario, BATCH 2 (Day 2). Alice returns from vacation, opens a fresh ChatGPT session (NEW traceId, no parent_span_id link to Batch 1), reads the previously-stored note:9911 from the agent_notes table, and the agent (still operating under the injection embedded in the note body) emails the contents to attacker@evil.com. The read span carries `gen_ai.data_source.id = table://internal/agent_notes/row/9911` matching Batch 1's write — this is the per-resource fingerprint match that the taint store must resolve. Today's engine: the cross-batch lookup at `assessment.rs:125` is gated to `op==retrieval`; this read is `op==execute_tool`, so the lookup misses, no Day-0 lineage is attached, and the egress falls through to Undetermined/Green. This batch demonstrates the failure on main.",
+  "_comment": "Delayed-exfil scenario, BATCH 2 (Day 2). Alice opens a fresh ChatGPT session with no parent-span link to Batch 1, reads `table://internal/agent_notes/row/9911`, and the agent emails the contents externally. When this fixture follows Batch 1 in the same demo tenant, the matching resource fingerprint re-joins the retained Day-0 evidence and the later egress returns Red. This is a repository-authored synthetic detection example; it does not establish what a named third-party control detects.",
   "resourceSpans": [
     {
       "resource": {

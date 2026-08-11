@@ -1,5 +1,5 @@
 {
-  "_comment": "Delayed-exfil scenario, BATCH 1 (Day 0). Alice's ChatGPT agent, under an indirect prompt injection planted in a phishing email, reads PII from internal customers table and stores a derivative summary into the internal agent_notes table. No egress happens in this batch — the data is parked in internal storage. Today's engine fires no Red verdict here (correctly — no egress). After the soft-verdict pass lands, the engine MUST record one ZoneRiskEvent on `table://internal/agent_notes` tagged with the actor bundle hash for Alice@chatgpt-team-acmecorp.",
+  "_comment": "Delayed-exfil scenario, BATCH 1 (Day 0). Alice's ChatGPT agent, under an indirect prompt injection planted in a phishing email, reads PII from an internal customer table and stores a derivative summary in `table://internal/agent_notes/row/9911`. No egress occurs in this batch, so no Red result is expected. The retained resource and zone risk provide evidence for a later batch that reads the same resource fingerprint.",
   "resourceSpans": [
     {
       "resource": {
