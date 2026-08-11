@@ -5,9 +5,8 @@
 # shared staging API. Never adapt it to accept a customer file. Actual customer
 # telemetry belongs on the customer-local ADR-008 edge.
 #
-# Each trace is a reconstruction of a named, publicly disclosed
-# production AI-agent breach (through January 2026) plus a two-trace
-# patient-attacker scenario showing cross-batch lineage.
+# The bundle contains ten disclosure-based reconstructions plus a two-trace
+# synthetic patient-attacker scenario showing cross-batch lineage.
 #
 # Usage:
 #   PROVENEX_DEMO_API_TOKEN=pvx_trial_... \
@@ -44,6 +43,7 @@ case "$HEALTH_STATUS" in
   200) ;;
   401) echo "error: demo key is unknown or revoked (HTTP 401)" >&2; exit 1 ;;
   402) echo "error: demo trial is expired (HTTP 402)" >&2; exit 1 ;;
+  403) echo "error: demo key or tenant is inactive/revoked (HTTP 403)" >&2; exit 1 ;;
   *) echo "error: staging key health returned HTTP $HEALTH_STATUS" >&2; exit 1 ;;
 esac
 python3 - "$HEALTH_FILE" <<'PY'
@@ -66,6 +66,7 @@ RENDER_HTML=1
 for arg in "$@"; do
   case "$arg" in
     --no-report) RENDER_HTML=0 ;;
+    *) echo "error: unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
 
@@ -88,24 +89,26 @@ post() {
     --data-binary "@$SCRIPT_DIR/$fixture" \
     -o "$response_json"
 
-  python3 -c "
-import sys, json
+  python3 - "$response_json" <<'PY'
+import json
+import sys
+
 try:
-    with open('$response_json') as f:
+    with open(sys.argv[1], encoding="utf-8") as f:
         d = json.load(f)
 except Exception as e:
     print(f'  bad response: {e}')
-    sys.exit()
+    sys.exit(1)
 findings = d.get('findings', []) or []
 if findings:
     red = d.get('red_verdicts', 0)
-    print(f'  Found {red} unsafe chain(s).')
+    print(f'  Found {red} Red chain finding(s).')
     for i, f in enumerate(findings, 1):
-        print(f'  [{i}] Agent: {f.get(\"agent\", \"?\")}')
+        print(f'  [{i}] Agent: {f.get("agent", "?")}')
         for r in (f.get('retrieved', []) or [])[:3]:
-            print(f'      Retrieved: {r.get(\"label\", \"?\")}')
+            print(f'      Retrieved: {r.get("label", "?")}')
         aa = f.get('attempted_action', {}) or {}
-        print(f'      Attempted action: {aa.get(\"label\", \"?\")}')
+        print(f'      Attempted action: {aa.get("label", "?")}')
         wf = (f.get('why_flagged') or '').strip()
         if wf:
             print(f'      Why flagged: {wf}')
@@ -121,7 +124,7 @@ else:
         print(f'    - {binding} / {risk}')
         if explanation:
             print(f'      {explanation}')
-"
+PY
 
   if [ "$RENDER_HTML" = "1" ] && [ -f "$response_json" ]; then
     python3 "$SCRIPT_DIR/render-verdict.py" \
@@ -135,9 +138,8 @@ cat <<'BANNER'
 ╔══════════════════════════════════════════════════════════════════╗
 ║  Provenex synthetic detection appendix                          ║
 ║                                                                  ║
-║  12 reconstructions of named production AI-agent breaches        ║
-║  disclosed through January 2026, plus a 2-trace patient-attacker ║
-║  scenario showing cross-batch lineage.                           ║
+║  10 public-disclosure reconstructions plus a 2-trace synthetic   ║
+║  patient-attacker scenario showing cross-batch lineage.          ║
 ║                                                                  ║
 ║  Repository-owned fixtures only; no customer telemetry.          ║
 ║  Retrospective detection only; this does not prove a live block. ║
@@ -190,7 +192,7 @@ post "11_delayed_exfil_day0_write.otlp.json" \
 
 post "12_delayed_exfil_day2_egress.otlp.json" \
   "[12/12] Delayed exfil; Day 2 egress (closure crosses batches)" \
-  "Red, high-risk-resource-egress / high; cross-batch lineage walks back to the Day 0 write; the patient-attacker shape no UEBA can see"
+  "Red, high-risk-resource-egress / high; cross-batch lineage walks back to the Day 0 write; this fixture does not establish what a third-party control detects"
 
 printf "\n──────────────────────────────────────────────────────\n"
 printf "  Done. Synthetic verdicts persisted to the demo audit log.\n\n"

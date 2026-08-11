@@ -28,10 +28,11 @@ customer file upload to send raw telemetry to the shared scorer.
 
 ## Synthetic detection appendix
 
-[`samples/`](samples/) contains 12 repository-owned attack reconstructions.
-The runner may send only those fixtures to staging with a designated demo key.
-This is a detection-only appendix: it does not use customer data and does not
-prove that a reverse proxy blocked an action.
+[`samples/`](samples/) contains ten repository-authored, disclosure-based
+reconstructions plus a two-trace synthetic delayed-exfil scenario. The runner
+may send only those 12 fixtures to staging with a designated demo key. This is
+a detection-only appendix: it does not use customer data, prove that a named
+vendor remains vulnerable, or prove that a reverse proxy blocked an action.
 
 The live-block proof is the installed edge rehearsal: the same denied action is
 forwarded in observe mode (HTTP 200), then withheld before upstream delivery in

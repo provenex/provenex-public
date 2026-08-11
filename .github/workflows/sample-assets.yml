@@ -1,0 +1,27 @@
+name: Public sample assets
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/sample-assets.yml"
+      - "samples/**"
+      - "README.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/sample-assets.yml"
+      - "samples/**"
+      - "README.md"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate public sample packaging
+        run: python3 -m unittest -v samples/test_public_assets.py
+      - name: Validate runner syntax
+        run: bash -n samples/try-me.sh
