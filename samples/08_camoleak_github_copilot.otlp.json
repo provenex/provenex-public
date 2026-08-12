@@ -33,7 +33,7 @@
           "scope": {"name": "github.copilot.chat.camoleak.reconstructed"},
           "spans": [
             {
-              "traceId": "ca110ea000000000000000059145cve",
+              "traceId": "459ccd2654957162ff176168b8855205",
               "spanId": "3000000000000801",
               "name": "execute_tool fetch_github_pr_comments (poisoned PR title)",
               "kind": 1,
@@ -50,7 +50,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ca110ea000000000000000059145cve",
+              "traceId": "459ccd2654957162ff176168b8855205",
               "spanId": "1000000000000801",
               "parentSpanId": "3000000000000801",
               "name": "invoke_agent github-copilot-chat (PR review)",
@@ -68,7 +68,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ca110ea000000000000000059145cve",
+              "traceId": "459ccd2654957162ff176168b8855205",
               "spanId": "5000000000000801",
               "parentSpanId": "1000000000000801",
               "name": "execute_tool read_private_repo_file (injected step)",
@@ -86,7 +86,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ca110ea000000000000000059145cve",
+              "traceId": "459ccd2654957162ff176168b8855205",
               "spanId": "7000000000000801",
               "parentSpanId": "1000000000000801",
               "name": "chat gpt-4o (renders byte-encoded Camo image sequence)",
@@ -94,8 +94,8 @@
               "startTimeUnixNano": "1728345604400000000",
               "endTimeUnixNano": "1728345610500000000",
               "links": [
-                {"traceId": "ca110ea000000000000000059145cve", "spanId": "3000000000000801"},
-                {"traceId": "ca110ea000000000000000059145cve", "spanId": "5000000000000801"}
+                {"traceId": "459ccd2654957162ff176168b8855205", "spanId": "3000000000000801"},
+                {"traceId": "459ccd2654957162ff176168b8855205", "spanId": "5000000000000801"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
@@ -106,7 +106,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ca110ea000000000000000059145cve",
+              "traceId": "459ccd2654957162ff176168b8855205",
               "spanId": "8000000000000801",
               "parentSpanId": "7000000000000801",
               "name": "fetch_image_url camo.githubusercontent.com (byte 1)",
@@ -125,7 +125,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ca110ea000000000000000059145cve",
+              "traceId": "459ccd2654957162ff176168b8855205",
               "spanId": "8200000000000801",
               "parentSpanId": "7000000000000801",
               "name": "fetch_image_url camo.githubusercontent.com (byte 2)",
@@ -144,7 +144,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ca110ea000000000000000059145cve",
+              "traceId": "459ccd2654957162ff176168b8855205",
               "spanId": "8400000000000801",
               "parentSpanId": "7000000000000801",
               "name": "fetch_image_url camo.githubusercontent.com (byte 3)",

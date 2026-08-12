@@ -1,0 +1,32 @@
+# A5 — Action descends from a superseded policy doc while a current
+# version exists. Superseded protocols are "untrusted-for-current-action"
+# even though the source store is legitimate.
+rules:
+- pattern: policy-store://acme-health/protocol/*/v3.2
+  zone: untrusted-external
+- pattern: policy-store://acme-health/protocol/*/v4.0
+  zone: internal
+- pattern: ehr://acme-health/patient/*/current
+  zone: privileged-pii
+- pattern: tool://place_medication_order*
+  zone: privileged-action
+- pattern: tool://retrieve_protocol*
+  zone: internal
+- pattern: tool://read_patient_state*
+  zone: privileged-pii
+- pattern: model://*
+  zone: internal
+- pattern: agent://*
+  zone: internal
+- pattern: tool://*
+  zone: internal
+- pattern: prompt://*
+  zone: internal
+tool_actions:
+- pattern: tool://retrieve_protocol*
+  class: external-read
+- pattern: tool://read_patient_state*
+  class: external-read
+- pattern: tool://place_medication_order*
+  class: egress
+destination_allowlist: []

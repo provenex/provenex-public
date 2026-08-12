@@ -1,0 +1,34 @@
+# A4 — Ledger post from unverified upstream input. Unverified upstream
+# imports are "untrusted-for-this-action" — the imports://*/<not-verified>
+# pattern marks them untrusted-external. The bloomberg-fx feed is
+# verified upstream, hence internal. The approved spreadsheet is
+# privileged-pii (financial data + four-eyes approval).
+rules:
+- pattern: imports://fx-rates/*
+  zone: untrusted-external
+- pattern: imports://bloomberg-fx/*
+  zone: internal
+- pattern: drive://acme/finance/*
+  zone: privileged-pii
+- pattern: tool://post_ledger_entry*
+  zone: privileged-action
+- pattern: tool://read_upstream_import*
+  zone: internal
+- pattern: tool://read_approved_recon_spreadsheet*
+  zone: privileged-pii
+- pattern: model://*
+  zone: internal
+- pattern: agent://*
+  zone: internal
+- pattern: tool://*
+  zone: internal
+- pattern: prompt://*
+  zone: internal
+tool_actions:
+- pattern: tool://read_upstream_import*
+  class: external-read
+- pattern: tool://read_approved_recon_spreadsheet*
+  class: external-read
+- pattern: tool://post_ledger_entry*
+  class: egress
+destination_allowlist: []

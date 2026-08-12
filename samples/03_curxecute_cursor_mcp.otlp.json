@@ -32,7 +32,7 @@
           "scope": {"name": "cursor.curxecute.reconstructed"},
           "spans": [
             {
-              "traceId": "cu1015ea000000000000000054135cve",
+              "traceId": "6d1576a8b918c78106c5c95ddeb125b1",
               "spanId": "3000000000000301",
               "name": "execute_tool mcp.slack.read_channel (#releases) - attacker message present",
               "kind": 1,
@@ -50,7 +50,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "cu1015ea000000000000000054135cve",
+              "traceId": "6d1576a8b918c78106c5c95ddeb125b1",
               "spanId": "1000000000000301",
               "parentSpanId": "3000000000000301",
               "name": "invoke_agent cursor-agent (Slack summarization request)",
@@ -69,7 +69,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "cu1015ea000000000000000054135cve",
+              "traceId": "6d1576a8b918c78106c5c95ddeb125b1",
               "spanId": "5000000000000301",
               "parentSpanId": "1000000000000301",
               "name": "chat claude-sonnet-4 (planning the response, follows hidden directive)",
@@ -77,7 +77,7 @@
               "startTimeUnixNano": "1722259203000000000",
               "endTimeUnixNano": "1722259205500000000",
               "links": [
-                {"traceId": "cu1015ea000000000000000054135cve", "spanId": "3000000000000301"}
+                {"traceId": "6d1576a8b918c78106c5c95ddeb125b1", "spanId": "3000000000000301"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
@@ -90,7 +90,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "cu1015ea000000000000000054135cve",
+              "traceId": "6d1576a8b918c78106c5c95ddeb125b1",
               "spanId": "6000000000000301",
               "parentSpanId": "5000000000000301",
               "name": "execute_tool write_to_file (~/.cursor/mcp.json)",
@@ -98,7 +98,7 @@
               "startTimeUnixNano": "1722259206000000000",
               "endTimeUnixNano": "1722259206800000000",
               "links": [
-                {"traceId": "cu1015ea000000000000000054135cve", "spanId": "3000000000000301"}
+                {"traceId": "6d1576a8b918c78106c5c95ddeb125b1", "spanId": "3000000000000301"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
@@ -111,7 +111,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "cu1015ea000000000000000054135cve",
+              "traceId": "6d1576a8b918c78106c5c95ddeb125b1",
               "spanId": "7000000000000301",
               "parentSpanId": "6000000000000301",
               "name": "shell_exec (mcp.json auto-trust fires new server command)",
@@ -119,8 +119,8 @@
               "startTimeUnixNano": "1722259207000000000",
               "endTimeUnixNano": "1722259214500000000",
               "links": [
-                {"traceId": "cu1015ea000000000000000054135cve", "spanId": "3000000000000301"},
-                {"traceId": "cu1015ea000000000000000054135cve", "spanId": "6000000000000301"}
+                {"traceId": "6d1576a8b918c78106c5c95ddeb125b1", "spanId": "3000000000000301"},
+                {"traceId": "6d1576a8b918c78106c5c95ddeb125b1", "spanId": "6000000000000301"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},

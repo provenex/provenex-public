@@ -1,0 +1,28 @@
+# Honest-mistake archetype policy set — scoped to the chain-level invariants
+# the five archetypes target. Drops the default engine's bare
+# `privileged-data-to-privileged-action` and `sensitive-retrieval-egress`
+# rules — those are correct catches in their own right but they are not
+# what the honest-mistake archetypes demonstrate, and they would fire on
+# matched benign twins that (legitimately) read privileged data to take a
+# privileged action.
+#
+# Mirrors the PolicyConfig used by tests/honest_mistake_traces.rs so the
+# CLI-driven demo produces the same pass/clear pattern as the regression
+# suite. Copy/symlink into the scratch config dir alongside
+# customer_trust_zones.yaml when running provenex-scan on the honest-
+# mistake fixtures.
+
+enable_delegation_scope: false
+enable_composition_light: false
+enable_trusted_data_only: false
+
+rules:
+  - name: "Untrusted content combined with sensitive data must not exfiltrate"
+    id: cross-zone-composition
+    from_zones: [untrusted-external, privileged-pii]
+    to_zone: external-egress
+
+  - name: "Untrusted content must not influence a privileged action"
+    id: untrusted-influence-on-privileged-action
+    from_zones: [untrusted-external, privileged-pii]
+    to_zone: privileged-action

@@ -31,7 +31,7 @@
           "scope": {"name": "perplexity.comet.cometjacking.reconstructed"},
           "spans": [
             {
-              "traceId": "c0aaaaa0000000000000cometjacking",
+              "traceId": "a6970aa002d229ac0a01e9c0f49dc439",
               "spanId": "3000000000000901",
               "name": "execute_tool browser_open (clicked link with poisoned query param)",
               "kind": 1,
@@ -50,7 +50,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "c0aaaaa0000000000000cometjacking",
+              "traceId": "a6970aa002d229ac0a01e9c0f49dc439",
               "spanId": "1000000000000901",
               "parentSpanId": "3000000000000901",
               "name": "invoke_agent comet (page interpretation per auto-context)",
@@ -68,7 +68,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "c0aaaaa0000000000000cometjacking",
+              "traceId": "a6970aa002d229ac0a01e9c0f49dc439",
               "spanId": "5000000000000901",
               "parentSpanId": "1000000000000901",
               "name": "execute_tool gmail_read_messages (injected: 20 recent)",
@@ -86,7 +86,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "c0aaaaa0000000000000cometjacking",
+              "traceId": "a6970aa002d229ac0a01e9c0f49dc439",
               "spanId": "7000000000000901",
               "parentSpanId": "1000000000000901",
               "name": "chat perplexity-pro-search (plans the egress per URL injection)",
@@ -94,8 +94,8 @@
               "startTimeUnixNano": "1729123205300000000",
               "endTimeUnixNano": "1729123210400000000",
               "links": [
-                {"traceId": "c0aaaaa0000000000000cometjacking", "spanId": "3000000000000901"},
-                {"traceId": "c0aaaaa0000000000000cometjacking", "spanId": "5000000000000901"}
+                {"traceId": "a6970aa002d229ac0a01e9c0f49dc439", "spanId": "3000000000000901"},
+                {"traceId": "a6970aa002d229ac0a01e9c0f49dc439", "spanId": "5000000000000901"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
@@ -106,7 +106,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "c0aaaaa0000000000000cometjacking",
+              "traceId": "a6970aa002d229ac0a01e9c0f49dc439",
               "spanId": "8000000000000901",
               "parentSpanId": "7000000000000901",
               "name": "execute_tool http_post (exfil to attacker collect)",
@@ -114,7 +114,7 @@
               "startTimeUnixNano": "1729123210500000000",
               "endTimeUnixNano": "1729123212400000000",
               "links": [
-                {"traceId": "c0aaaaa0000000000000cometjacking", "spanId": "5000000000000901"}
+                {"traceId": "a6970aa002d229ac0a01e9c0f49dc439", "spanId": "5000000000000901"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},

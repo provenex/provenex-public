@@ -1,0 +1,41 @@
+# Customer-side trust-zone classification for the platform-SRE agent.
+# Maps the source-introducing data_source.id URIs to zones so the engine
+# fires the cross-zone composition that Provenex's chain-level invariant
+# represents. NO ATTACKER in this fixture — these zone labels reflect the
+# customer's invariant ("load-test artifacts are untrusted-for-this-action
+# when the action target is production") rather than malicious provenance.
+rules:
+- pattern: configrepo://acme/payments-api/loadtest/*
+  zone: untrusted-external
+- pattern: configrepo://acme/payments-api/production/*
+  zone: internal
+- pattern: k8s://prod/payments-api/*
+  zone: privileged-pii
+- pattern: tool://terraform_apply_prod*
+  zone: privileged-action
+- pattern: tool://read_config_file*
+  zone: internal
+- pattern: tool://read_current_prod_spec*
+  zone: privileged-pii
+- pattern: model://*
+  zone: internal
+- pattern: agent://*
+  zone: internal
+- pattern: tool://*
+  zone: internal
+- pattern: prompt://*
+  zone: internal
+- pattern: parser://*
+  zone: internal
+- pattern: embedding://*
+  zone: internal
+- pattern: retriever://*
+  zone: internal
+tool_actions:
+- pattern: tool://read_config_file*
+  class: external-read
+- pattern: tool://read_current_prod_spec*
+  class: external-read
+- pattern: tool://terraform_apply_prod*
+  class: egress
+destination_allowlist: []

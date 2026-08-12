@@ -1,0 +1,38 @@
+# A3 — IAM widen by external-vendor request. Vendor-portal sources are
+# "untrusted-for-priv-change" because they are unverified for scope
+# changes (they're verified for the read scope, not the write scope).
+# Internal access-review tickets stay internal because they carry
+# resource-owner sign-off.
+rules:
+- pattern: vendor-portal://*
+  zone: untrusted-external
+- pattern: access-review://acme/*
+  zone: internal
+- pattern: iam://prod/*
+  zone: privileged-pii
+- pattern: tool://terraform_apply_iam*
+  zone: privileged-action
+- pattern: tool://fetch_vendor_ticket*
+  zone: untrusted-external
+- pattern: tool://fetch_access_review_ticket*
+  zone: internal
+- pattern: tool://read_iam_policy*
+  zone: privileged-pii
+- pattern: model://*
+  zone: internal
+- pattern: agent://*
+  zone: internal
+- pattern: tool://*
+  zone: internal
+- pattern: prompt://*
+  zone: internal
+tool_actions:
+- pattern: tool://fetch_vendor_ticket*
+  class: external-read
+- pattern: tool://fetch_access_review_ticket*
+  class: external-read
+- pattern: tool://read_iam_policy*
+  class: external-read
+- pattern: tool://terraform_apply_iam*
+  class: egress
+destination_allowlist: []

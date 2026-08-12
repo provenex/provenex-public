@@ -32,7 +32,7 @@
           "scope": {"name": "notion.ai-3.pdf-exfil.reconstructed"},
           "spans": [
             {
-              "traceId": "27ad000000000000000000notion3pdf",
+              "traceId": "418c2ba85c6e1e4811a1679aaad7d54c",
               "spanId": "3000000000000701",
               "name": "execute_tool parse_pdf (customer-feedback.pdf - POISONED)",
               "kind": 1,
@@ -48,7 +48,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "27ad000000000000000000notion3pdf",
+              "traceId": "418c2ba85c6e1e4811a1679aaad7d54c",
               "spanId": "1000000000000701",
               "parentSpanId": "3000000000000701",
               "name": "invoke_agent notion-ai (PDF + workspace synthesis)",
@@ -66,7 +66,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "27ad000000000000000000notion3pdf",
+              "traceId": "418c2ba85c6e1e4811a1679aaad7d54c",
               "spanId": "5000000000000701",
               "parentSpanId": "1000000000000701",
               "name": "execute_tool read_notion_page (Q4 OKRs)",
@@ -83,7 +83,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "27ad000000000000000000notion3pdf",
+              "traceId": "418c2ba85c6e1e4811a1679aaad7d54c",
               "spanId": "6000000000000701",
               "parentSpanId": "1000000000000701",
               "name": "execute_tool read_notion_page (confidential roadmap)",
@@ -100,7 +100,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "27ad000000000000000000notion3pdf",
+              "traceId": "418c2ba85c6e1e4811a1679aaad7d54c",
               "spanId": "7000000000000701",
               "parentSpanId": "1000000000000701",
               "name": "chat claude-3-5-sonnet (synthesis + plans web_search per injection)",
@@ -108,9 +108,9 @@
               "startTimeUnixNano": "1727097606500000000",
               "endTimeUnixNano": "1727097610800000000",
               "links": [
-                {"traceId": "27ad000000000000000000notion3pdf", "spanId": "3000000000000701"},
-                {"traceId": "27ad000000000000000000notion3pdf", "spanId": "5000000000000701"},
-                {"traceId": "27ad000000000000000000notion3pdf", "spanId": "6000000000000701"}
+                {"traceId": "418c2ba85c6e1e4811a1679aaad7d54c", "spanId": "3000000000000701"},
+                {"traceId": "418c2ba85c6e1e4811a1679aaad7d54c", "spanId": "5000000000000701"},
+                {"traceId": "418c2ba85c6e1e4811a1679aaad7d54c", "spanId": "6000000000000701"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
@@ -121,7 +121,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "27ad000000000000000000notion3pdf",
+              "traceId": "418c2ba85c6e1e4811a1679aaad7d54c",
               "spanId": "8000000000000701",
               "parentSpanId": "7000000000000701",
               "name": "execute_tool http_get (web_search underlying HTTP carries exfiltrated OKRs in query string)",
@@ -129,8 +129,8 @@
               "startTimeUnixNano": "1727097610900000000",
               "endTimeUnixNano": "1727097612500000000",
               "links": [
-                {"traceId": "27ad000000000000000000notion3pdf", "spanId": "5000000000000701"},
-                {"traceId": "27ad000000000000000000notion3pdf", "spanId": "6000000000000701"}
+                {"traceId": "418c2ba85c6e1e4811a1679aaad7d54c", "spanId": "5000000000000701"},
+                {"traceId": "418c2ba85c6e1e4811a1679aaad7d54c", "spanId": "6000000000000701"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
