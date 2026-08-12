@@ -32,7 +32,7 @@
           "scope": {"name": "anthropic.mcp_git_rce.reconstructed"},
           "spans": [
             {
-              "traceId": "9c105ea0000000000000mcpgit68143",
+              "traceId": "499cc5920a09b964de81479f8ca23bdb",
               "spanId": "3000000000001001",
               "name": "execute_tool mcp.git.read_file (repo README - poisoned)",
               "kind": 1,
@@ -49,7 +49,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "9c105ea0000000000000mcpgit68143",
+              "traceId": "499cc5920a09b964de81479f8ca23bdb",
               "spanId": "1000000000001001",
               "parentSpanId": "3000000000001001",
               "name": "invoke_agent claude-code (PR review per developer ask)",
@@ -67,7 +67,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "9c105ea0000000000000mcpgit68143",
+              "traceId": "499cc5920a09b964de81479f8ca23bdb",
               "spanId": "5000000000001001",
               "parentSpanId": "1000000000001001",
               "name": "execute_tool mcp.git.git_init (CVE-2025-68143 path traversal)",
@@ -75,7 +75,7 @@
               "startTimeUnixNano": "1737590403000000000",
               "endTimeUnixNano": "1737590403600000000",
               "links": [
-                {"traceId": "9c105ea0000000000000mcpgit68143", "spanId": "3000000000001001"}
+                {"traceId": "499cc5920a09b964de81479f8ca23bdb", "spanId": "3000000000001001"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
@@ -87,7 +87,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "9c105ea0000000000000mcpgit68143",
+              "traceId": "499cc5920a09b964de81479f8ca23bdb",
               "spanId": "6000000000001001",
               "parentSpanId": "1000000000001001",
               "name": "execute_tool mcp.git.git_diff (CVE-2025-68144 argument injection)",
@@ -95,7 +95,7 @@
               "startTimeUnixNano": "1737590403700000000",
               "endTimeUnixNano": "1737590405400000000",
               "links": [
-                {"traceId": "9c105ea0000000000000mcpgit68143", "spanId": "3000000000001001"}
+                {"traceId": "499cc5920a09b964de81479f8ca23bdb", "spanId": "3000000000001001"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
@@ -107,7 +107,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "9c105ea0000000000000mcpgit68143",
+              "traceId": "499cc5920a09b964de81479f8ca23bdb",
               "spanId": "7000000000001001",
               "parentSpanId": "6000000000001001",
               "name": "shell_exec (curl payload from attacker - actual RCE)",
@@ -115,8 +115,8 @@
               "startTimeUnixNano": "1737590405500000000",
               "endTimeUnixNano": "1737590412100000000",
               "links": [
-                {"traceId": "9c105ea0000000000000mcpgit68143", "spanId": "3000000000001001"},
-                {"traceId": "9c105ea0000000000000mcpgit68143", "spanId": "6000000000001001"}
+                {"traceId": "499cc5920a09b964de81479f8ca23bdb", "spanId": "3000000000001001"},
+                {"traceId": "499cc5920a09b964de81479f8ca23bdb", "spanId": "6000000000001001"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},

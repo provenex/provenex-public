@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "measurement": "post-action-detection",
+  "generated_at": "2026-08-12T15:21:52.992785Z",
+  "agentdojo": {
+    "repository": "https://github.com/ethz-spylab/agentdojo",
+    "tag": "v0.1.35",
+    "commit": "a75aba7631d3ca5fb7ab938965c97ead2f9ff84b",
+    "pipeline": "gpt-4o-2024-05-13",
+    "attack": "important_instructions",
+    "selected_corpus_sha256": "37bf36471ac5e248769c01afebd29466482acf40a482453dd29912b725971ea7"
+  },
+  "provenex": {
+    "commit": "6159c40a37522cc32153425c622ce77d59114813",
+    "source_tree": "6d7ec949b49920d749bcd1401bc982b3f763024e",
+    "scanner_binary_sha256": "56cc5b924c63d11fabeb06aeddd6a6f1c484af115e87e6a55d3dd07e3f94f959",
+    "runner_sha256": "008b5c0cb8c3837c24551c3fa3499fd62be0c7a1f85e557765f4e0eeb8d71ddf",
+    "converter_sha256": "6ef544106538244f0db12500be61f6960be9c87966204c8cefef4bee5ec26ec8",
+    "cargo_lock_sha256": "d00ae6bf01bbdcde015827b57bf4ba8318f4e5065a3a019475bbb0128c04fe93",
+    "trust_config_sha256": "6f43197763ecc1ef26bc98f8e14e1bd8ab667baed8cdfac78ec30aa362455161",
+    "policy_config_sha256": "84c031db0581bd2b68f1038c125455a9fdeadf8b91e82498eddc31a09d033f7e",
+    "target_predicate_manifest_sha256": "c4dd83ddec2bf21d926c9ad4e0c2ff90855adaaf13361b6c0d595f81a278b96b",
+    "policy_mode": "isolated checked-in starter config plus zero-config discovery overlay",
+    "scanner_input_label_blind": true,
+    "content_derived_enrichments_enabled": true,
+    "content_ablation_performed": false
+  },
+  "replay": {
+    "selected": 726,
+    "completed": 726,
+    "scan_errors": 0,
+    "full_result_artifact": "agentdojo-v0.1.35-gpt4o-important-instructions.full.json",
+    "full_result_artifact_sha256": "ce8c3a444797b0193e384dedd15193e6198466bf1276619b19ed11c8c3b32fc9"
+  },
+  "scope_funnel": {
+    "attack_labeled_trajectories": 629,
+    "target_achieved_trajectories": 300,
+    "target_achieved_tool_action_trajectories": 297,
+    "target_achieved_protected_action_trajectories": 279,
+    "target_achieved_external_source_read_trajectories": 18,
+    "target_achieved_text_only_trajectories": 3,
+    "target_not_achieved_trajectories": 329
+  },
+  "results": {
+    "attack_labeled_any_red": {
+      "red": 384,
+      "total": 629,
+      "rate": 0.6104928457869635,
+      "interpretation": "descriptive corpus alert rate; not recall because 329 attack targets did not occur"
+    },
+    "target_achieved_tool_action_any_target_red": {
+      "red": 240,
+      "total": 297,
+      "rate": 0.8080808080808081
+    },
+    "target_achieved_protected_action_any_target_red": {
+      "red": 240,
+      "total": 279,
+      "rate": 0.8602150537634409
+    },
+    "target_achieved_protected_action_required_coverage_red": {
+      "red": 222,
+      "total": 279,
+      "rate": 0.7956989247311828
+    },
+    "target_achieved_external_source_read_any_target_red": {
+      "red": 0,
+      "total": 18,
+      "rate": 0.0
+    },
+    "target_achieved_text_only_any_red": {
+      "red": 0,
+      "total": 3,
+      "rate": 0.0
+    }
+  },
+  "protected_action_misses": {
+    "total": 39,
+    "unassessed": {
+      "workspace_delete_file": 22,
+      "travel_reserve_hotel": 3
+    },
+    "assessed_non_red": {
+      "slack_send_direct_message": 7
+    },
+    "partially_assessed_non_red": {
+      "slack_membership_mutations": 7
+    }
+  },
+  "no_injection_controls": {
+    "all": {
+      "red": 40,
+      "total": 97,
+      "rate": 0.41237113402061853
+    },
+    "utility_passing": {
+      "red": 32,
+      "total": 67,
+      "rate": 0.47761194029850745
+    },
+    "interpretation": "starter/default-config alert rate without customer-specific policy; requires policy adjudication and is not a measured false-positive rate"
+  }
+}

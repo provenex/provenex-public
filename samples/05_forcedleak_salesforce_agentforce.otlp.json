@@ -32,7 +32,7 @@
           "scope": {"name": "salesforce.agentforce.forcedleak.reconstructed"},
           "spans": [
             {
-              "traceId": "f0aaaa00000000000000forcedleak25",
+              "traceId": "9f5dc93205296cf79587e6c6f9ea0933",
               "spanId": "3000000000000501",
               "name": "execute_tool search_crm (recent leads) - attacker lead retrieved",
               "kind": 1,
@@ -49,7 +49,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "f0aaaa00000000000000forcedleak25",
+              "traceId": "9f5dc93205296cf79587e6c6f9ea0933",
               "spanId": "1000000000000501",
               "parentSpanId": "3000000000000501",
               "name": "invoke_agent einstein-copilot (pipeline summary request)",
@@ -67,7 +67,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "f0aaaa00000000000000forcedleak25",
+              "traceId": "9f5dc93205296cf79587e6c6f9ea0933",
               "spanId": "5000000000000501",
               "parentSpanId": "1000000000000501",
               "name": "execute_tool query_salesforce_pipeline (>$1M opportunities) - injected step",
@@ -85,7 +85,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "f0aaaa00000000000000forcedleak25",
+              "traceId": "9f5dc93205296cf79587e6c6f9ea0933",
               "spanId": "7000000000000501",
               "parentSpanId": "1000000000000501",
               "name": "chat einstein-gpt (response generation with embedded HTTP call)",
@@ -93,8 +93,8 @@
               "startTimeUnixNano": "1727265605300000000",
               "endTimeUnixNano": "1727265610500000000",
               "links": [
-                {"traceId": "f0aaaa00000000000000forcedleak25", "spanId": "3000000000000501"},
-                {"traceId": "f0aaaa00000000000000forcedleak25", "spanId": "5000000000000501"}
+                {"traceId": "9f5dc93205296cf79587e6c6f9ea0933", "spanId": "3000000000000501"},
+                {"traceId": "9f5dc93205296cf79587e6c6f9ea0933", "spanId": "5000000000000501"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
@@ -105,7 +105,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "f0aaaa00000000000000forcedleak25",
+              "traceId": "9f5dc93205296cf79587e6c6f9ea0933",
               "spanId": "8000000000000501",
               "parentSpanId": "7000000000000501",
               "name": "execute_tool post_to_url (CSP-allowed expired partner domain)",
@@ -113,7 +113,7 @@
               "startTimeUnixNano": "1727265610700000000",
               "endTimeUnixNano": "1727265612400000000",
               "links": [
-                {"traceId": "f0aaaa00000000000000forcedleak25", "spanId": "5000000000000501"}
+                {"traceId": "9f5dc93205296cf79587e6c6f9ea0933", "spanId": "5000000000000501"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},

@@ -1,0 +1,34 @@
+# Customer-side trust-zone classification for the multi-tenant CS agent.
+# The customer's invariant: any record whose source tenant differs from
+# the session tenant is "untrusted-for-this-action" — semantically wrong,
+# even if the IAM read was authorized. The chain Provenex reconstructs is
+# what carries the source-tenant attribute forward to the destination.
+rules:
+- pattern: cases-kb://shared/tenant-B/*
+  zone: untrusted-external
+- pattern: cases-kb://shared/tenant-A/*
+  zone: privileged-pii
+- pattern: tool://send_case_summary_webhook*
+  zone: external-egress
+- pattern: tool://search_shared_cases*
+  zone: internal
+- pattern: tool://read_tenant_profile*
+  zone: privileged-pii
+- pattern: https://mountain-tools.example/*
+  zone: external-egress
+- pattern: model://*
+  zone: internal
+- pattern: agent://*
+  zone: internal
+- pattern: tool://*
+  zone: internal
+- pattern: prompt://*
+  zone: internal
+tool_actions:
+- pattern: tool://search_shared_cases*
+  class: external-read
+- pattern: tool://read_tenant_profile*
+  class: external-read
+- pattern: tool://send_case_summary_webhook*
+  class: egress
+destination_allowlist: []

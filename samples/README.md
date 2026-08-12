@@ -1,15 +1,15 @@
 # Synthetic attack-reconstruction appendix
 
-This runner contains ten repository-authored OTLP reconstructions based on
-public disclosures plus a two-trace synthetic delayed-exfil scenario. These 12
+This runner contains 13 repository-authored OTLP reconstructions based on
+public disclosures plus a two-trace synthetic delayed-exfil scenario. These 15
 fixtures are safe to send to staging as a clearly labeled detection appendix.
 They contain no customer telemetry and are not captures from the named vendors.
 
 They do **not** prove live blocking: `/v1/receipts` evaluates a completed
 synthetic trace and persists the result to the selected demo tenant. The
-trusted live-block proof is the customer-local Install Edge rehearsal, where
-the reverse proxy forwards in observe mode and returns HTTP 403 without
-upstream delivery in enforce mode.
+trusted live-block proof is the controlled customer-local Install Edge mock
+run, where the reverse proxy forwards in observe mode and returns HTTP 403
+without upstream delivery in enforce mode.
 
 ## Run safely
 
@@ -18,7 +18,7 @@ health and refuses to start without an explicit central-synthetic
 acknowledgment:
 
 ```bash
-export PROVENEX_DEMO_ENGINE_URL='https://provenex-verdict.fly.dev'
+export PROVENEX_DEMO_ENGINE_URL='<Engine origin supplied for this demo tenant>'
 export PROVENEX_DEMO_API_TOKEN='pvx_trial_<designated-demo-key>'
 export PROVENEX_DEMO_ALLOW_SYNTHETIC_CENTRAL=1
 ./try-me.sh
@@ -28,8 +28,23 @@ Do not rename these variables to a general customer ingest credential, add a
 file argument, or adapt the script for a customer export. Actual telemetry must
 be imported into the customer-local edge/UI.
 
-The script accepts `--no-report` to skip local HTML rendering. JSON and HTML
-artifacts go under the gitignored `reports/` directory by default.
+The script accepts `--no-report` to skip local HTML rendering. Each execution
+gets a gitignored `reports/run-<timestamp>-<nonce>/` directory containing the
+raw response JSON and headers, the stored-audit response, optional HTML, and
+(after every assertion succeeds) a run manifest. Every successful response
+must carry the same `X-Provenex-Source-Commit` identity; the manifest records
+it, and any value other than a full 40-character commit fails closed. The
+runner also fails if the Engine returns the wrong verdict for a scenario's
+exact target receipt; incidental Red findings elsewhere in a trace do not
+satisfy the assertion.
+
+The checked-in fixtures never change at runtime. Temporary copies receive
+per-run trace and data-flow identities plus explicit `_provenex_sample_run`
+harness metadata. Identifier-shaped JSON field names are serialized with an
+equivalent JSON Unicode escape so a raw-string token scanner cannot mistake a
+schema key such as `body_base64` for a customer record id. A JSON parser still
+sees the original field name and scenario. The final audit rejects any target
+closure contaminated by an older run or a different scenario.
 
 ## Bundle
 
@@ -37,32 +52,40 @@ artifacts go under the gitignored `reports/` directory by default.
 |---|---|---|---|
 | 01 | EchoLeak / M365 Copilot | untrusted email → privileged retrieval → URL egress | Red, cross-zone composition |
 | 02 | Cursor NomShub | fetched repo rules → credential/device-code egress | multiple Red findings |
-| 03 | CurXecute | Slack MCP input → config write → command execution | Red |
+| 03 | CurXecute | Slack MCP input → config write → command execution | Red, high-risk-resource-egress |
 | 04 | AgentFlayer | poisoned Drive document → secret search → image URL | Red |
 | 05 | ForcedLeak | Web-to-Lead injection → CRM read → partner domain | Red |
 | 06 | ShadowLeak | attacker email → mailbox search → server-side POST | Red |
 | 07 | Notion PDF exfil | injected PDF → workspace read → search-query egress | Red |
 | 08 | CamoLeak | PR comment → private repository → Camo URL | multiple Red findings |
 | 09 | CometJacking | untrusted URL parameter → connector data → POST | Red |
-| 10 | Anthropic MCP-Git RCE | repository content → MCP argument injection → shell | Red |
+| 10 | Anthropic MCP-Git RCE | repository content → MCP argument injection → shell | Red, high-risk-resource-egress |
 | 11 | Delayed exfil, day 0 | poisoned write only | no Red; no egress yet |
 | 12 | Delayed exfil, day 2 | later read/egress joined to day 0 | Red, cross-batch lineage |
+| 13 | Slack AI exfil | poisoned public-channel retrieval → private-channel secret → unsafe response link → victim click | **known miss**: human click is visible but not a governed agent action |
+| 14 | Devin secrets leak | poisoned GitHub issue → runtime secrets → shell/browser egress | multiple Red findings |
+| 15 | Bing/Greshake | poisoned adjacent webpage → session history → image fetch | Red, cross-zone composition |
 
-Traces 11 and 12 must run in order against the same demo tenant to demonstrate
-the cross-batch join. Running either trace alone is not that proof.
+Traces 11 and 12 run in order with per-run trace, span, and document identities.
+The runner then verifies that the Day 2 target's stored closure contains this
+run's exact Day 0 note receipt and a persistence boundary. Running either trace
+alone is not that proof.
 
 ## Related engine evidence
 
-The default runner stays focused on the current ten-case disclosure pack. A
-separate older engine regression suite also covers Slack AI, Devin's
-secrets-leak shape, and Bing-Greshake, along with EchoLeak and Cursor NomShub.
-After removing those two overlaps, the suites cover 13 unique named public
-shapes.
+The public runner now includes all 13 unique named shapes that were previously
+split between this pack and an older engine regression suite, including Slack
+AI, Devin's secrets-leak shape, and Bing/Greshake.
 
 Those are disclosure-based telemetry reconstructions, not vendor captures or
 proof that a vendor remains vulnerable. AgentDojo is separate benchmark
 evidence, not an incident, and the engine's 18 latent-path playbooks are
 discovery hypotheses, not 18 additional breach samples.
+
+The checked-in event timestamps are synthetic scenario times. Several older
+fixtures encode the disclosed month/day under a different year; do not use
+their OTel timestamps as incident or disclosure chronology. The fixture's
+source notes and the linked primary disclosure are the chronology authority.
 
 ## What this appendix proves
 
@@ -71,12 +94,23 @@ discovery hypotheses, not 18 additional breach samples.
 - Intent is not required: the same primitive can catch malicious steering and
   honest mistakes.
 - Cross-batch detection can join a later egress to an earlier poisoned write.
+- The pack also preserves a real boundary instead of forcing every disclosure
+  green: Slack AI's disclosed exfiltration completes only when a human clicks
+  the generated link, and that click is currently unassessed.
 
 It does not establish production prevalence, customer-specific coverage,
 another control's result, an executed exploit, or inline enforcement. A Red
 result here is a retrospective policy finding, not a block receipt. Use
 Discovery against approved customer-local telemetry to establish topology and
-coverage, and use the reverse-proxy safe rehearsal for the live-block claim.
+coverage, and use the reverse-proxy controlled mock run for the live-block
+claim.
+
+The final stored-audit check is deliberately limited to a low-volume,
+dedicated demo tenant: the current endpoint returns at most 1,000 rows and has
+no pagination contract. It validates the schema-v2 signer provenance and key
+identity returned by the API, but the audit response does not include the
+signature envelope needed for local cryptographic verification. Do not present
+this runner as an independent signature-verification proof.
 
 ## Credential failures
 

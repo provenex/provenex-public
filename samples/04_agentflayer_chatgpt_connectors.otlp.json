@@ -31,7 +31,7 @@
           "scope": {"name": "openai.chatgpt.connectors.agentflayer.reconstructed"},
           "spans": [
             {
-              "traceId": "afaaaa000000000000000agentflayer",
+              "traceId": "66e3f7372ddc1e3b8a77084df74864b4",
               "spanId": "3000000000000401",
               "name": "execute_tool list_drive_files (work-projects folder)",
               "kind": 1,
@@ -47,7 +47,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "afaaaa000000000000000agentflayer",
+              "traceId": "66e3f7372ddc1e3b8a77084df74864b4",
               "spanId": "4000000000000401",
               "parentSpanId": "3000000000000401",
               "name": "execute_tool read_drive_file (acme-customer-feedback.gdoc - POISONED)",
@@ -64,7 +64,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "afaaaa000000000000000agentflayer",
+              "traceId": "66e3f7372ddc1e3b8a77084df74864b4",
               "spanId": "1000000000000401",
               "parentSpanId": "4000000000000401",
               "name": "invoke_agent chatgpt-connectors (planning the multi-doc summary)",
@@ -82,7 +82,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "afaaaa000000000000000agentflayer",
+              "traceId": "66e3f7372ddc1e3b8a77084df74864b4",
               "spanId": "5000000000000401",
               "parentSpanId": "1000000000000401",
               "name": "execute_tool search_drive (api keys, secrets) - injected step",
@@ -100,7 +100,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "afaaaa000000000000000agentflayer",
+              "traceId": "66e3f7372ddc1e3b8a77084df74864b4",
               "spanId": "7000000000000401",
               "parentSpanId": "1000000000000401",
               "name": "chat gpt-4o (response with markdown image embedding the secret)",
@@ -108,8 +108,8 @@
               "startTimeUnixNano": "1722960605300000000",
               "endTimeUnixNano": "1722960610500000000",
               "links": [
-                {"traceId": "afaaaa000000000000000agentflayer", "spanId": "4000000000000401"},
-                {"traceId": "afaaaa000000000000000agentflayer", "spanId": "5000000000000401"}
+                {"traceId": "66e3f7372ddc1e3b8a77084df74864b4", "spanId": "4000000000000401"},
+                {"traceId": "66e3f7372ddc1e3b8a77084df74864b4", "spanId": "5000000000000401"}
               ],
               "attributes": [
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
@@ -120,7 +120,7 @@
               "status": {"code": 0}
             },
             {
-              "traceId": "afaaaa000000000000000agentflayer",
+              "traceId": "66e3f7372ddc1e3b8a77084df74864b4",
               "spanId": "8000000000000401",
               "parentSpanId": "7000000000000401",
               "name": "fetch_image_url (browser auto-loads exfil URL)",

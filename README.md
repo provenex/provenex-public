@@ -11,41 +11,58 @@ Provenex evaluation.
   reference for the local ingestor, workspace, and reverse proxy.
 - [`docs/telemetry-checklist.md`](docs/telemetry-checklist.md): supported agent,
   HTTP, REST, RPC/gRPC, and audit-event telemetry shapes.
+- [`docs/data-activity-ingest.md`](docs/data-activity-ingest.md): the
+  sensor-neutral endpoint, browser, SaaS, DLP, EDR, SWG, and CASB metadata
+  contract.
+- [`docs/agentdojo-benchmark.md`](docs/agentdojo-benchmark.md): the frozen
+  telemetry-scope funnel, current catch rates, misses, and control alert burden.
+- [`benchmarks/honest-mistakes/`](benchmarks/honest-mistakes/): five
+  policy-scoped, repository-authored unsafe/benign matched pairs with frozen
+  file hashes and recorded offline results.
 - [`docs/what-provenex-cannot-see.md`](docs/what-provenex-cannot-see.md): the
   blind-spots honesty contract.
 
 ## Data boundary
 
-For actual customer telemetry, raw spans/events, topology, receipts, discovery
-reports, and enforcement evidence stay on the customer-local ADR-008 edge. The
-edge sends only a bounded closure containing customer-keyed HMAC tokens,
-topology, coarse resource kinds/zones, coverage, timestamps, and allowlisted
-signals to `https://provenex-verdict.fly.dev/v1/score-closure`. **Data Custody**
-shows the exact most recent outbound JSON.
+For customer telemetry, raw spans/events, topology, receipts, discovery
+reports, and enforcement evidence stay on the customer-local Provenex Edge.
+The Edge sends only a bounded, customer-keyed HMAC-minimized closure to the
+hosted decision service's `/v1/score-closure`. Most shared evaluations use
+`https://provenex-verdict.fly.dev`; a dedicated evaluation may receive another
+origin, so use the Engine origin supplied with the customer's trial.
 
-Do not configure an OTel exporter, the legacy `provenex-ingest` forwarder, or a
-customer file upload to send raw telemetry to the shared scorer.
+In the console, **Data boundary → Your data** shows the exact most recent
+outbound scoring envelope. Do not configure an OTel exporter, the legacy
+`provenex-ingest` forwarder, or a customer file upload to send raw telemetry to
+the hosted Engine.
+
+An authenticated Edge can import canonical OTLP and explicitly selected,
+supported vendor-audit files. The caller selects the source format; Edge does
+not sniff arbitrary dumps or poll vendor APIs. OAuth, pagination, cursors, and
+continuous collection remain separate integrations.
 
 ## Synthetic detection appendix
 
-[`samples/`](samples/) contains ten repository-authored, disclosure-based
+[`samples/`](samples/) contains 13 repository-authored, disclosure-based
 reconstructions plus a two-trace synthetic delayed-exfil scenario. The runner
-may send only those 12 fixtures to staging with a designated demo key. This is
+may send only those 15 fixtures to staging with a designated demo key. This is
 a detection-only appendix: it does not use customer data, prove that a named
 vendor remains vulnerable, or prove that a reverse proxy blocked an action.
 
-The live-block proof is the installed edge rehearsal: the same denied action is
-forwarded in observe mode (HTTP 200), then withheld before upstream delivery in
-enforce mode (HTTP 403), with a signed customer-local PEP receipt.
+The current enforcement proof is a controlled customer-local mock run: the
+same request is forwarded in observe mode (HTTP 200), then withheld before
+delivery in enforce mode (HTTP 403), with an independently signed local PEP
+receipt. It is not evidence that a real customer production action was gated.
 
 ## Superseded artifact
 
-The public `provenex-ingest` source mirror predates ADR-008 and forwards raw or
-partially redacted telemetry centrally. It is retained for historical review,
-not for current customer evaluations. Use the installer-provisioned
-`provenex-edge` bundle instead.
+Historical revisions of this repository contained a `provenex-ingest` source
+mirror that predates the customer-local Edge architecture and forwarded raw or
+partially redacted telemetry centrally. It is not part of the current tree or
+the current evaluation path. Use the supplied `provenex-edge` bundle instead.
 
 ## Security
 
 Never put customer keys or payloads in issues. Send security disclosures to
-security@provenex.ai.
+security@provenex.ai. See [SECURITY.md](SECURITY.md) for the private-reporting
+policy.

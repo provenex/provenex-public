@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "measurement": "offline-policy-scoped-matched-pairs",
+  "validated_at": "2026-08-12",
+  "provenex": {
+    "commit": "f2487f23889cc7cee2074e6ed74468f1464a4b66",
+    "source_tree": "065bdcf5b57304d4bd350f9f51fae30fc88ddef8",
+    "test": "cargo test --test honest_mistake_traces"
+  },
+  "policy_sha256": "89de2fbdd16ac235a95547e026ba1926c8d19995662144bce9974599b3129080",
+  "results": {
+    "unsafe_red": 5,
+    "unsafe_total": 5,
+    "benign_zero_red": 5,
+    "benign_total": 5,
+    "test_failures": 0
+  },
+  "archetypes": [
+    {
+      "id": "a1_nonprod_to_prod",
+      "unsafe_sha256": "8e8c6478c2ea32ae11766a7685758a722cab6531115fd47592b04f14ad071666",
+      "benign_sha256": "2415cd38395275ff86778eba290200ea3b6fe61eac85251ff1608df3a54aa316",
+      "trust_zones_sha256": "5696488bf7da98b53d0483beb34319997f6bfba48b20941ab71d1ba187f3c7d4",
+      "unsafe_binding": "untrusted-influence-on-privileged-action",
+      "unsafe_red": true,
+      "benign_red": false
+    },
+    {
+      "id": "a2_cross_tenant",
+      "unsafe_sha256": "1f6ab8f2b9e00437d43779ce342bef948a8843a93cb9dd42ac555021c38cd9b5",
+      "benign_sha256": "7fc0e04f0825cd515231dd232794cfe00fc3f40d1029e80a73c72a13bb9f3a85",
+      "trust_zones_sha256": "2b988427db66ebaffed65afd3fcb02267eeacbe53d75c8e5d2481cf70b042222",
+      "unsafe_binding": "cross-zone-composition",
+      "unsafe_red": true,
+      "benign_red": false
+    },
+    {
+      "id": "a3_iam_widen",
+      "unsafe_sha256": "2acd546f4a41a3b1474e8a277325637ce5eef4441b2f54d23fb7c6dfc2e6cb48",
+      "benign_sha256": "e3da3ce1cad6d228fa2dcb6af5e15aa24d1e1866a7c6bed066076aa7dc55d340",
+      "trust_zones_sha256": "80eba1ac0a6008466e4d24fc87119d796ea23a89fd38f8fd783f984f26d6b49c",
+      "unsafe_binding": "untrusted-influence-on-privileged-action",
+      "unsafe_red": true,
+      "benign_red": false
+    },
+    {
+      "id": "a4_ledger_post",
+      "unsafe_sha256": "3223b64b221519dd411e22082fc497a76bd444ab10b4520430397aded85ff23f",
+      "benign_sha256": "1e37742d7feac4d921182594099d4eb686d0a31c01ceaacc8dd0db7e57864614",
+      "trust_zones_sha256": "6132c8a93b0c3a3a39b68a71058b94d47ee4106ed8327156d4f7f1165cf1ef8c",
+      "unsafe_binding": "untrusted-influence-on-privileged-action",
+      "unsafe_red": true,
+      "benign_red": false
+    },
+    {
+      "id": "a5_superseded_policy",
+      "unsafe_sha256": "e1cfdab71ab488d4699f5a472a9a5e10cb3b3428f50d53a1ba7deb471106608c",
+      "benign_sha256": "c368667b284a5bb2b75028ed10e917a6e2b1ae8c710c90e43bac69123b2c5813",
+      "trust_zones_sha256": "6f2ab9c28a80fe6016d9df4d15d7f0794417cd4330d04d7228a33179d37aedd2",
+      "unsafe_binding": "untrusted-influence-on-privileged-action",
+      "unsafe_red": true,
+      "benign_red": false
+    }
+  ],
+  "limitations": [
+    "repository-authored synthetic telemetry",
+    "policy-scoped rather than zero-config",
+    "no incumbent comparator was executed",
+    "post-action detection result, not live blocking proof"
+  ]
+}
