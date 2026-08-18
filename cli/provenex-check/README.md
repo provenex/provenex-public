@@ -51,9 +51,10 @@ canonical scan root. Malformed, missing, and over-limit first records are
 skipped. Only bytes through the first record count toward the 32 MiB aggregate
 metadata budget. Discovery then lists the selected count and bytes in the
 preflight. It never reads browser history, cookies, or authentication stores,
-and never runs unless the flag is present. Discovery stops at 10,000
-directories, 100,000 directory entries, 20,000 candidate session files, or
-32 MiB of first-record metadata—whichever comes first.
+and never runs unless the flag is present. Discovery fails closed rather than
+returning partial selection if the combined Claude/Codex traversal would
+exceed 10,000 directories, 100,000 directory entries, 20,000 candidate session
+files, or 32 MiB of first-record metadata.
 
 Then create an owner-only report directory and run a check:
 
@@ -137,8 +138,10 @@ Other artifact flags cannot relabel a web conversation export.
 - `.git`, dependency trees, compiler/build outputs, coverage, and vendor
   directories are excluded by default.
 - Directory symlinks and file symlinks are never followed.
-- Only a maintained list of code, configuration, manifest, lock, and `.env`
-  text files is selected; invalid UTF-8 and over-limit inputs fail closed.
+- Only a maintained list of code, configuration, manifest, lock, and
+  environment text files is selected; `.env`, `.env.*`, and every `*.env`
+  suffix (for example `prod.env`) is classified as
+  `environment_secrets`. Invalid UTF-8 and over-limit inputs fail closed.
 - Generic configuration is a high-sensitivity upload category because JSON,
   YAML, TOML, and similar files can contain credentials or customer data. The
   exact high-sensitivity path list remains limited to recognized
@@ -156,10 +159,16 @@ Other artifact flags cannot relabel a web conversation export.
   are the consented routes. Other artifact flags cannot relabel files beneath
   those roots. Local protected paths are never shown or uploaded.
 - Defaults are 5,000 source files, 1 MiB per source file, 16 MiB per telemetry
-  artifact, and 64 MiB total. User overrides are capped at 10,000 files, 4 MiB
-  per source file, 256 artifacts, 64 MiB per artifact, and 64 MiB total.
+  artifact, and 64 MiB total. Requests are capped at 8 consent categories;
+  user overrides are capped at 10,000 files, 4 MiB per source file, 256 artifacts
+  (including at most 32 AWS-cost and 32 dependency-audit artifacts), 64 MiB per
+  artifact, and 64 MiB total.
   Separately, the serialized JSON request is refused above the service's
   128 MiB body cap.
+- The bounded upload plus receipt of response headers has a 30-minute total
+  deadline, suitable for the 128 MiB request ceiling. A successful streamed
+  response is capped at 32 MiB, a 10-minute total body deadline, and a
+  60-second idle deadline between chunks.
 - Git state is read with non-shelling, read-only Git commands. The CLI resolves
   an absolute executable only from absolute PATH directories outside the scan
   root, excludes repo-owned shims, sanitizes Git injection variables and the
@@ -184,6 +193,7 @@ absolute paths, backslashes, and `.`/`..` components are rejected. For example:
 ```sh
 provenex-check scan /path/to/project --dry-run \
   --exclude '.env*' \
+  --exclude '*.env' \
   --exclude 'fixtures/customer-data/**'
 ```
 

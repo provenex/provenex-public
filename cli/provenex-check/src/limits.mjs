@@ -1,7 +1,10 @@
 export const SERVER_LIMITS = Object.freeze({
   maxRequestBytes: 128 * 1024 * 1024,
+  maxConsentCategories: 8,
   maxSourceFiles: 10_000,
   maxArtifacts: 256,
+  maxAwsCostArtifacts: 32,
+  maxDependencyAuditArtifacts: 32,
   maxRelativePathBytes: 4_096,
   maxTargetBytes: 255,
   maxArtifactNameBytes: 255,

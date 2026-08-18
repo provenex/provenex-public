@@ -24,6 +24,30 @@
           }
         }
       }
+    },
+    {
+      "properties": {
+        "artifacts": {
+          "contains": {
+            "properties": { "kind": { "const": "aws_cost" } },
+            "required": ["kind"]
+          },
+          "minContains": 0,
+          "maxContains": 32
+        }
+      }
+    },
+    {
+      "properties": {
+        "artifacts": {
+          "contains": {
+            "properties": { "kind": { "const": "dependency_audit" } },
+            "required": ["kind"]
+          },
+          "minContains": 0,
+          "maxContains": 32
+        }
+      }
     }
   ],
   "properties": {
@@ -39,6 +63,7 @@
         "policy_id": { "const": "provenex-check-ephemeral-v1" },
         "categories": {
           "type": "array",
+          "maxItems": 8,
           "uniqueItems": true,
           "items": {
             "enum": [

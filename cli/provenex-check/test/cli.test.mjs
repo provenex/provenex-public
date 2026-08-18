@@ -16,10 +16,22 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { targetLabelForRoot } from '../src/collector.mjs';
+import {
+  DEFAULT_EXCLUDED_DIRECTORIES,
+  targetLabelForRoot,
+} from '../src/collector.mjs';
+import {
+  CLIENT_LIMITS,
+  readBoundedJson,
+  submitRun,
+  validateApiOrigin,
+} from '../src/client.mjs';
+import { createExcludeMatcher } from '../src/excludes.mjs';
 import { DISCOVERY_LIMITS, SERVER_LIMITS } from '../src/limits.mjs';
+import { confirmUpload } from '../src/main.mjs';
 import { atomicWrite } from '../src/output.mjs';
 import { CHECK_DATA_POLICY } from '../src/policy.mjs';
 import { validateHostedResponse } from '../src/report.mjs';
@@ -693,6 +705,20 @@ test('collection bounds and symlink artifacts fail as operational errors', async
   const symlinked = await runCli(['scan', project, '--session-input', linked, '--dry-run']);
   assert.equal(symlinked.code, 3);
   assert.match(symlinked.stderr, /must not be a symbolic link/);
+
+  for (const [command, flag, kind] of [
+    ['audit', '--aws-input', 'aws_cost'],
+    ['scan', '--dependency-audit', 'dependency_audit'],
+  ]) {
+    const overKindCap = await runCli([
+      command,
+      project,
+      ...Array.from({ length: 33 }, () => [flag, path.join(base, 'does-not-need-to-exist.json')]).flat(),
+      '--dry-run',
+    ]);
+    assert.equal(overKindCap.code, 3);
+    assert.match(overKindCap.stderr, new RegExp(`${kind} artifact selection contains 33 files; limit is 32`));
+  }
 });
 
 test('report outputs reject scan overlap and symlinks', async (t) => {
@@ -740,7 +766,7 @@ test('rejects legacy server-rendered and private response fields', async (t) => 
   const { project } = await makeProject(t);
   const legacy = {
     ...validResponse(),
-    terminal: 'MALICIOUS_SERVER_TERMINAL',
+    terminal: '\u001b[31mMALICIOUS_SERVER_TERMINAL',
     html_report: '<script>malicious()</script>',
     source_commit: 'a'.repeat(40),
   };
@@ -755,6 +781,7 @@ test('rejects legacy server-rendered and private response fields', async (t) => 
   assert.equal(result.code, 3);
   assert.match(result.stderr, /response has unsupported fields/);
   assert.ok(!result.stdout.includes('MALICIOUS_SERVER_TERMINAL'));
+  assert.ok(!result.stdout.includes('\u001b'));
 });
 
 test('rejects a response whose mandatory retention policy differs from consent', async (t) => {
@@ -1151,9 +1178,16 @@ test('hosted request limits and path grammar stay aligned with the public schema
     path.join(PACKAGE_ROOT, 'schemas', 'provenex-check-request.v1.schema.json'),
     'utf8',
   ));
+  assert.equal(
+    schema.properties.consent.properties.categories.maxItems,
+    SERVER_LIMITS.maxConsentCategories,
+  );
   assert.equal(schema.properties.source_files.maxItems, SERVER_LIMITS.maxSourceFiles);
   assert.equal(schema.properties.artifacts.maxItems, SERVER_LIMITS.maxArtifacts);
   assert.equal(SERVER_LIMITS.maxArtifacts, 256);
+  assert.equal(SERVER_LIMITS.maxConsentCategories, 8);
+  assert.equal(SERVER_LIMITS.maxAwsCostArtifacts, 32);
+  assert.equal(SERVER_LIMITS.maxDependencyAuditArtifacts, 32);
   assert.equal(schema.properties.target['x-maxUtf8Bytes'], SERVER_LIMITS.maxTargetBytes);
   assert.equal(
     schema.properties.artifacts.items.properties.name['x-maxUtf8Bytes'],
@@ -1183,6 +1217,17 @@ test('hosted request limits and path grammar stay aligned with the public schema
   assert.deepEqual(
     schema.allOf[0].then.properties.artifacts.items.properties.kind.enum,
     ['session', 'conversation_export', 'dependency_audit'],
+  );
+  assert.deepEqual(
+    schema.allOf.slice(1).map((rule) => ({
+      kind: rule.properties.artifacts.contains.properties.kind.const,
+      min: rule.properties.artifacts.minContains,
+      max: rule.properties.artifacts.maxContains,
+    })),
+    [
+      { kind: 'aws_cost', min: 0, max: SERVER_LIMITS.maxAwsCostArtifacts },
+      { kind: 'dependency_audit', min: 0, max: SERVER_LIMITS.maxDependencyAuditArtifacts },
+    ],
   );
   assert.deepEqual(
     schema.properties.artifacts.items.properties.kind.enum,
@@ -1217,6 +1262,12 @@ test('hosted request limits and path grammar stay aligned with the public schema
     maxMetadataBytes: 32 * 1024 * 1024,
     maxFirstRecordBytes: 64 * 1024,
   });
+  assert.deepEqual(CLIENT_LIMITS, {
+    maxResponseBytes: 32 * 1024 * 1024,
+    uploadAndHeadersTotalMs: 30 * 60 * 1000,
+    responseBodyIdleMs: 60 * 1000,
+    responseBodyTotalMs: 10 * 60 * 1000,
+  });
 
   const pathPattern = new RegExp(
     schema.properties.source_files.items.properties.relative_path.pattern,
@@ -1246,6 +1297,15 @@ test('OpenAPI documents the complete hosted error surface', async () => {
     assert.match(openapi, new RegExp(`^        '${status}':`, 'm'));
   }
   assert.match(openapi, /runtime logs and cost evidence require\n          audit/);
+  assert.match(openapi, /x-maxResponseBytes: 33554432/);
+  assert.match(openapi, /uploadAndHeadersTotalMs: 1800000/);
+  assert.match(openapi, /responseBodyIdleMs: 60000/);
+  assert.match(openapi, /responseBodyTotalMs: 600000/);
+
+  const readme = await readFile(path.join(PACKAGE_ROOT, 'README.md'), 'utf8');
+  assert.match(readme, /Discovery fails closed rather than/);
+  assert.doesNotMatch(readme, /Discovery stops at/);
+  assert.match(readme, /--exclude '\*\.env'/);
 });
 
 test('npm manifest is intentionally private and has no publication configuration', async () => {
@@ -1265,6 +1325,7 @@ test('public response schema exposes only the strict DTO and ephemeral envelope'
   ));
 
   assert.equal(responseSchema.additionalProperties, false);
+  assert.equal(responseSchema['x-maxSerializedResponseBytes'], CLIENT_LIMITS.maxResponseBytes);
   assert.deepEqual(Object.keys(responseSchema.properties).sort(), [
     'exit_code',
     'retention_policy',
@@ -1287,6 +1348,31 @@ test('public response schema exposes only the strict DTO and ephemeral envelope'
   assert.ok(responseSchema.$defs.report.required.includes('conclusion'));
   assert.equal(requestSchema.properties.consent.properties.policy_id.const, CHECK_DATA_POLICY.policy_id);
   assert.ok(requestSchema.properties.artifacts.items.properties.kind.enum.includes('conversation_export'));
+
+  const displayProperties = [
+    responseSchema.$defs.finding.properties.title,
+    responseSchema.$defs.finding.properties.consequence,
+    responseSchema.$defs.finding.properties.evidence,
+    responseSchema.$defs.finding.properties.next_step,
+    responseSchema.$defs.coverage.properties.detail,
+    responseSchema.$defs.report.properties.conclusion,
+    responseSchema.$defs.report.properties.limitations.items,
+  ];
+  for (const property of displayProperties) {
+    const pattern = new RegExp(property.pattern, 'u');
+    assert.equal(pattern.test('Safe customer-facing text.'), true);
+    assert.equal(pattern.test('   '), false);
+    assert.equal(pattern.test('unsafe\u001b[31m'), false);
+    assert.equal(pattern.test('unsafe\u200dformat'), false);
+  }
+  const responseTargetPattern = new RegExp(
+    responseSchema.$defs.report.properties.target.pattern,
+    'u',
+  );
+  assert.equal(responseTargetPattern.test('solo  founder\u00a0project'), true);
+  assert.equal(responseTargetPattern.test(' leading'), false);
+  assert.equal(responseTargetPattern.test('trailing '), false);
+  assert.equal(responseTargetPattern.test('unsafe\u001btarget'), false);
 
   for (const legacyField of ['terminal', 'html_report', 'source_commit', 'private_report']) {
     assert.ok(!Object.hasOwn(responseSchema.properties, legacyField));
@@ -1317,4 +1403,353 @@ test('sanitizes target labels and preflight output against terminal controls', {
   const bounded = targetLabelForRoot(path.join('/tmp', '界'.repeat(200)));
   assert.ok(Buffer.byteLength(bounded) <= SERVER_LIMITS.maxTargetBytes);
   assert.ok(bounded.endsWith('...'));
+});
+
+test('interactive upload consent accepts only an explicit yes on TTY streams', async () => {
+  async function answer(value) {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    input.isTTY = true;
+    output.isTTY = true;
+    let displayed = '';
+    output.setEncoding('utf8');
+    output.on('data', (chunk) => { displayed += chunk; });
+    const pending = confirmUpload('http://127.0.0.1:8787', { input, output });
+    input.end(value + '\n');
+    return { approved: await pending, displayed };
+  }
+
+  const accepted = await answer('  YeS  ');
+  assert.equal(accepted.approved, true);
+  assert.match(accepted.displayed, /Type yes to continue/);
+  assert.match(accepted.displayed, /http:\/\/127\.0\.0\.1:8787/);
+  assert.equal((await answer('y')).approved, false);
+  assert.equal((await answer('no')).approved, false);
+  await assert.rejects(
+    confirmUpload('https://api.provenex.ai', {
+      input: new PassThrough(),
+      output: new PassThrough(),
+    }),
+    /interactive approval or explicit --yes/,
+  );
+});
+
+test('API origin validation handles normalized origins and rejects endpoint edge cases', () => {
+  const accepted = new Map([
+    ['https://api.provenex.ai', 'https://api.provenex.ai'],
+    ['https://api.provenex.ai:443/', 'https://api.provenex.ai'],
+    ['HTTPS://API.PROVENEX.AI', 'https://api.provenex.ai'],
+    ['http://localhost:8787/', 'http://localhost:8787'],
+    ['https://127.0.0.1:4443', 'https://127.0.0.1:4443'],
+    ['http://[::1]:8787', 'http://[::1]:8787'],
+  ]);
+  for (const [candidate, normalized] of accepted) {
+    assert.equal(validateApiOrigin(candidate), normalized);
+  }
+
+  for (const candidate of [
+    'https://api.provenex.ai:4443',
+    'http://api.provenex.ai',
+    'https://user@api.provenex.ai',
+    'https://api.provenex.ai/v1',
+    'https://api.provenex.ai?tenant=x',
+    'https://api.provenex.ai#fragment',
+    'http://127.0.0.2:8787',
+    'https://localhost.example:8787',
+    'file://localhost/tmp',
+    '//api.provenex.ai',
+    'not a URL',
+  ]) {
+    assert.throws(() => validateApiOrigin(candidate), /API URL/);
+  }
+});
+
+test('dry-run performs no network request even when a loopback endpoint and --yes are supplied', async (t) => {
+  const { project } = await makeProject(t);
+  let requests = 0;
+  const origin = await mockServer(t, (_request, response) => {
+    requests += 1;
+    response.end();
+  });
+  const result = await runCli([
+    'audit', project, '--api-url', origin, '--yes', '--dry-run',
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(requests, 0);
+  assert.match(result.stdout, /nothing was uploaded and no API key was read/);
+});
+
+test('transport bounds upload headers and streamed response idle and total time', async () => {
+  const base = {
+    origin: 'http://127.0.0.1:8787',
+    apiKey: TEST_DEV_TOKEN,
+    serializedRequest: '{}',
+    expected: { command: 'scan', target: 'sample-project' },
+  };
+
+  let uploadSignal;
+  await assert.rejects(
+    submitRun({
+      ...base,
+      fetchImpl: (_url, options) => {
+        uploadSignal = options.signal;
+        return new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            const error = new Error('aborted');
+            error.name = 'AbortError';
+            reject(error);
+          }, { once: true });
+        });
+      },
+      limits: { uploadAndHeadersTotalMs: 25 },
+    }),
+    /upload and response headers total timeout expired/,
+  );
+  assert.equal(uploadSignal.aborted, true);
+
+  let idleCanceled = false;
+  await assert.rejects(
+    submitRun({
+      ...base,
+      fetchImpl: async () => new Response(new ReadableStream({
+        cancel() { idleCanceled = true; },
+      }), { status: 200 }),
+      limits: { responseBodyIdleMs: 25, responseBodyTotalMs: 1000 },
+    }),
+    /response body idle timeout expired/,
+  );
+  assert.equal(idleCanceled, true);
+
+  const encoder = new TextEncoder();
+  let totalCanceled = false;
+  let totalInterval;
+  await assert.rejects(
+    submitRun({
+      ...base,
+      fetchImpl: async () => new Response(new ReadableStream({
+        start(controller) {
+          totalInterval = setInterval(() => controller.enqueue(encoder.encode(' ')), 5);
+        },
+        cancel() {
+          clearInterval(totalInterval);
+          totalCanceled = true;
+        },
+      }), { status: 200 }),
+      limits: { responseBodyIdleMs: 200, responseBodyTotalMs: 50 },
+    }),
+    /response body total timeout expired/,
+  );
+  assert.equal(totalCanceled, true);
+});
+
+test('streamed responses without content-length are still byte bounded', async () => {
+  const response = new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(Uint8Array.from([1, 2, 3, 4]));
+      controller.enqueue(Uint8Array.from([5, 6, 7, 8, 9]));
+      controller.close();
+    },
+  }), { status: 200 });
+  assert.equal(response.headers.has('content-length'), false);
+  await assert.rejects(
+    readBoundedJson(response, { maxBytes: 8, idleTimeoutMs: 1000, totalTimeoutMs: 1000 }),
+    /response exceeds 8 bytes/,
+  );
+});
+
+test('server-authored terminal controls are rejected before local rendering', () => {
+  for (const finding of [
+    publicFinding({ title: 'unsafe\u001b[31mterminal' }),
+    publicFinding({ evidence: 'unsafe\u200dformat control' }),
+  ]) {
+    assert.throws(
+      () => validateHostedResponse(
+        validResponse({ findings: [finding] }),
+        { command: 'scan', target: 'sample-project' },
+      ),
+      /not sanitized display text/,
+    );
+  }
+});
+
+test('hosted reports are bound to both the approved command and target', () => {
+  assert.throws(
+    () => validateHostedResponse(
+      validResponse({ command: 'audit' }),
+      { command: 'scan', target: 'sample-project' },
+    ),
+    /report command differs from the approved request/,
+  );
+  assert.throws(
+    () => validateHostedResponse(
+      validResponse({ target: 'different-project' }),
+      { command: 'scan', target: 'sample-project' },
+    ),
+    /report target differs from the approved request/,
+  );
+});
+
+test('default excluded directories are all pruned before source collection', async (t) => {
+  const files = { 'app.js': 'safe();\n' };
+  DEFAULT_EXCLUDED_DIRECTORIES.forEach((directory, index) => {
+    files[path.posix.join(directory, 'excluded-' + index + '.js')] = 'default-exclusion-marker-' + index + '\n';
+  });
+  const { project } = await makeProject(t, { files });
+  let captured;
+  const origin = await mockServer(t, async (request, response) => {
+    captured = JSON.parse(await readRequest(request));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse()));
+  });
+  const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(captured.source_files.map((file) => file.relative_path), ['app.js']);
+  assert.ok(!JSON.stringify(captured).includes('default-exclusion-marker'));
+  for (const directory of DEFAULT_EXCLUDED_DIRECTORIES) {
+    assert.ok(result.stdout.includes(directory), directory);
+  }
+});
+
+test('exclude matcher covers literal, slash, star, question, and doublestar branches', () => {
+  const excluded = createExcludeMatcher([
+    'private',
+    'fixtures/customer',
+    '*.pem',
+    'secret?.json',
+    'generated/**',
+    'src/**/fixture?.ts',
+    'logs/*.json',
+    'scratch/',
+  ]);
+  for (const candidate of [
+    'private',
+    'src/private/key.txt',
+    'fixtures/customer',
+    'fixtures/customer/record.json',
+    'keys/signing.pem',
+    'nested/secret1.json',
+    'generated',
+    'generated/deep/output.js',
+    'src/fixture1.ts',
+    'src/a/b/fixture2.ts',
+    'logs/current.json',
+    'nested/scratch/file.js',
+  ]) {
+    assert.equal(excluded(candidate), true, candidate);
+  }
+  for (const candidate of [
+    'privately/file.js',
+    'fixtures/customers/record.json',
+    'keys/signing.pem.bak',
+    'secret12.json',
+    'generated-neighbor/file.js',
+    'src/a/fixture12.ts',
+    'logs/deep/current.json',
+    'scratchpad/file.js',
+  ]) {
+    assert.equal(excluded(candidate), false, candidate);
+  }
+});
+
+test('every env suffix is selected as high-sensitivity environment evidence', async (t) => {
+  const { project } = await makeProject(t, {
+    files: {
+      'app.js': 'safe();\n',
+      'prod.env': 'TOKEN=example\n',
+      'config/staging.ENV': 'TOKEN=example\n',
+    },
+  });
+  let captured;
+  const origin = await mockServer(t, async (request, response) => {
+    captured = JSON.parse(await readRequest(request));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse()));
+  });
+  const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.ok(captured.consent.categories.includes('environment_secrets'));
+  assert.ok(!captured.consent.categories.includes('configuration'));
+  assert.match(result.stdout, /High-sensitivity source paths selected: .*prod\.env/);
+  assert.match(result.stdout, /config\/staging\.ENV/);
+});
+
+test('audit sends every supported artifact with only opaque deterministic metadata', async (t) => {
+  const { base, project } = await makeProject(t);
+  const inputs = {
+    session: path.join(base, 'customer-session-name.jsonl'),
+    conversation: path.join(base, 'web-export', 'conversations.json'),
+    fly: path.join(base, 'production-fly-log.txt'),
+    cloudwatch: path.join(base, 'production-cloudwatch-log.txt'),
+    aws: path.join(base, 'sensitive-cost-export.csv'),
+    dependency: path.join(base, 'private-dependency-report.txt'),
+  };
+  await mkdir(path.dirname(inputs.conversation), { recursive: true });
+  await writeFile(inputs.session, '{"type":"assistant"}\n');
+  await writeFile(inputs.conversation, '[{"mapping":{}}]\n');
+  await writeFile(inputs.fly, '{"message":"fly"}\n');
+  await writeFile(inputs.cloudwatch, '{"events":[]}\n');
+  await writeFile(inputs.aws, '{"total":1}\n');
+  await writeFile(inputs.dependency, '{"vulnerabilities":{}}\n');
+
+  let captured;
+  const origin = await mockServer(t, async (request, response) => {
+    captured = JSON.parse(await readRequest(request));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse({ command: 'audit' })));
+  });
+  const result = await runCli([
+    'audit', project,
+    '--session-input', inputs.session,
+    '--session-input', inputs.conversation,
+    '--fly-log', inputs.fly,
+    '--cloudwatch-log', inputs.cloudwatch,
+    '--aws-input', inputs.aws,
+    '--dependency-audit', inputs.dependency,
+    '--api-url', origin,
+    '--yes',
+  ], { env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN } });
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(captured.command, 'audit');
+  assert.deepEqual(captured.artifacts.map(({ kind, name }) => ({ kind, name })), [
+    { kind: 'session', name: 'session-001.jsonl' },
+    { kind: 'conversation_export', name: 'conversation-export-001.json' },
+    { kind: 'fly_log', name: 'fly-log-001.jsonl' },
+    { kind: 'cloudwatch_log', name: 'cloudwatch-log-001.json' },
+    { kind: 'aws_cost', name: 'aws-cost-001.json' },
+    { kind: 'dependency_audit', name: 'dependency-audit-001.json' },
+  ]);
+  for (const artifact of captured.artifacts) {
+    assert.deepEqual(Object.keys(artifact).sort(), ['content', 'kind', 'name']);
+  }
+  for (const localPath of Object.values(inputs)) {
+    assert.ok(!JSON.stringify(captured.artifacts).includes(path.basename(localPath)));
+  }
+});
+
+test('an incomplete hosted analysis preserves the public exit code 3', async (t) => {
+  const { project } = await makeProject(t);
+  const origin = await mockServer(t, async (request, response) => {
+    await readRequest(request);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse({
+      status: 'incomplete',
+      coverage: [{
+        id: 'coverage-0001',
+        category: 'application_security',
+        status: 'partial',
+        detail: 'Only part of the selected evidence could be evaluated.',
+      }],
+      limitations: ['Analysis stopped safely before all checks completed.'],
+    })));
+  });
+  const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
+  });
+  assert.equal(result.code, 3, result.stderr);
+  assert.match(result.stdout, /Provenex Check scan — INCOMPLETE/);
+  assert.match(result.stdout, /Only part of the selected evidence could be evaluated/);
 });

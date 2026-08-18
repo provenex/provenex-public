@@ -2,13 +2,20 @@ import { homedir } from 'node:os';
 import { constants as fsConstants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { TextDecoder } from 'node:util';
 import { UsageError } from './errors.mjs';
 import { validateHostedResponse } from './report.mjs';
 
 const MAX_CONFIG_BYTES = 64 * 1024;
-const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 const PRODUCTION_API_ORIGIN = 'https://api.provenex.ai';
+
+export const CLIENT_LIMITS = Object.freeze({
+  maxResponseBytes: 32 * 1024 * 1024,
+  uploadAndHeadersTotalMs: 30 * 60 * 1000,
+  responseBodyIdleMs: 60 * 1000,
+  responseBodyTotalMs: 10 * 60 * 1000,
+});
 
 export function isLoopbackApiOrigin(origin) {
   const { hostname } = new URL(origin);
@@ -95,25 +102,73 @@ export async function loadApiKey(origin) {
   return parsed.api_key;
 }
 
-async function readBoundedJson(response) {
+function requirePositiveTimeout(value, label) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return value;
+}
+
+function cancelBody(reader, controller) {
+  controller?.abort();
+  void reader?.cancel().catch(() => {});
+}
+
+async function readWithDeadline(reader, idleMs, deadline) {
+  const remainingMs = deadline - performance.now();
+  if (remainingMs <= 0) throw new Error('API response body total timeout expired');
+  const totalDeadlineFirst = remainingMs <= idleMs;
+  const waitMs = Math.min(idleMs, remainingMs);
+  let timer;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(
+          totalDeadlineFirst
+            ? 'API response body total timeout expired'
+            : 'API response body idle timeout expired',
+        )), waitMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function readBoundedJson(response, {
+  maxBytes = CLIENT_LIMITS.maxResponseBytes,
+  idleTimeoutMs = CLIENT_LIMITS.responseBodyIdleMs,
+  totalTimeoutMs = CLIENT_LIMITS.responseBodyTotalMs,
+  controller,
+} = {}) {
+  requirePositiveTimeout(maxBytes, 'API response byte limit');
+  requirePositiveTimeout(idleTimeoutMs, 'API response body idle timeout');
+  requirePositiveTimeout(totalTimeoutMs, 'API response body total timeout');
   const declared = response.headers.get('content-length');
-  if (declared && /^[0-9]+$/.test(declared) && Number(declared) > MAX_RESPONSE_BYTES) {
-    await response.body?.cancel().catch(() => {});
-    throw new Error(`API response exceeds ${MAX_RESPONSE_BYTES} bytes`);
+  if (declared && /^[0-9]+$/.test(declared) && Number(declared) > maxBytes) {
+    cancelBody(response.body, controller);
+    throw new Error(`API response exceeds ${maxBytes} bytes`);
   }
   if (!response.body) throw new Error('API returned an empty response');
   const reader = response.body.getReader();
+  const deadline = performance.now() + totalTimeoutMs;
   const chunks = [];
   let bytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.byteLength;
-    if (bytes > MAX_RESPONSE_BYTES) {
-      await reader.cancel().catch(() => {});
-      throw new Error(`API response exceeds ${MAX_RESPONSE_BYTES} bytes`);
+  try {
+    while (true) {
+      const { done, value } = await readWithDeadline(reader, idleTimeoutMs, deadline);
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        cancelBody(reader, controller);
+        throw new Error(`API response exceeds ${maxBytes} bytes`);
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (error) {
+    cancelBody(reader, controller);
+    throw error;
   }
   const combined = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), bytes);
   let text;
@@ -129,12 +184,39 @@ async function readBoundedJson(response) {
   }
 }
 
-export async function submitRun({ origin, apiKey, serializedRequest, expected, timeoutMs = 60_000 }) {
+export async function submitRun({
+  origin,
+  apiKey,
+  serializedRequest,
+  expected,
+  fetchImpl = fetch,
+  limits = {},
+}) {
+  const uploadAndHeadersTotalMs = requirePositiveTimeout(
+    limits.uploadAndHeadersTotalMs ?? CLIENT_LIMITS.uploadAndHeadersTotalMs,
+    'API upload and response headers timeout',
+  );
+  const responseBodyIdleMs = requirePositiveTimeout(
+    limits.responseBodyIdleMs ?? CLIENT_LIMITS.responseBodyIdleMs,
+    'API response body idle timeout',
+  );
+  const responseBodyTotalMs = requirePositiveTimeout(
+    limits.responseBodyTotalMs ?? CLIENT_LIMITS.responseBodyTotalMs,
+    'API response body total timeout',
+  );
+  const maxResponseBytes = requirePositiveTimeout(
+    limits.maxResponseBytes ?? CLIENT_LIMITS.maxResponseBytes,
+    'API response byte limit',
+  );
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let uploadAndHeadersTimedOut = false;
+  const timer = setTimeout(() => {
+    uploadAndHeadersTimedOut = true;
+    controller.abort();
+  }, uploadAndHeadersTotalMs);
   let response;
   try {
-    response = await fetch(new URL('/v1/check/runs', origin), {
+    response = await fetchImpl(new URL('/v1/check/runs', origin), {
       method: 'POST',
       headers: {
         accept: 'application/json',
@@ -147,12 +229,16 @@ export async function submitRun({ origin, apiKey, serializedRequest, expected, t
       signal: controller.signal,
     });
   } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('API request timed out');
+    if (uploadAndHeadersTimedOut || error?.name === 'AbortError') {
+      throw new Error('API upload and response headers total timeout expired');
+    }
     throw new Error('API request failed before a response was received');
   } finally {
     clearTimeout(timer);
   }
   if (!response.ok) {
+    controller.abort();
+    void response.body?.cancel().catch(() => {});
     const candidateRequestId = response.headers.get('x-request-id');
     const requestId = candidateRequestId && /^[A-Za-z0-9._:-]{1,128}$/.test(candidateRequestId)
       ? candidateRequestId
@@ -160,6 +246,11 @@ export async function submitRun({ origin, apiKey, serializedRequest, expected, t
     const suffix = requestId ? ` (request ${requestId})` : '';
     throw new Error(`API request failed with HTTP ${response.status}${suffix}`);
   }
-  const body = await readBoundedJson(response);
+  const body = await readBoundedJson(response, {
+    maxBytes: maxResponseBytes,
+    idleTimeoutMs: responseBodyIdleMs,
+    totalTimeoutMs: responseBodyTotalMs,
+    controller,
+  });
   return validateHostedResponse(body, expected);
 }

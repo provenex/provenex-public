@@ -111,6 +111,19 @@ function isSourceFile(name) {
   return SOURCE_EXTENSIONS.has(path.extname(lower));
 }
 
+async function readAtMost(handle, maxBytes) {
+  const chunks = [];
+  let bytes = 0;
+  while (bytes <= maxBytes) {
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, (maxBytes + 1) - bytes));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, bytes);
+    if (bytesRead === 0) break;
+    chunks.push(buffer.subarray(0, bytesRead));
+    bytes += bytesRead;
+  }
+  return { buffer: Buffer.concat(chunks, bytes), bytes };
+}
+
 async function readRegularUtf8(filePath, maxBytes, label) {
   const before = await lstat(filePath);
   if (before.isSymbolicLink()) throw new Error(`${label} must not be a symbolic link`);
@@ -133,9 +146,13 @@ async function readRegularUtf8(filePath, maxBytes, label) {
     if (current.size > maxBytes) {
       throw new Error(`${label} is ${current.size} bytes; limit is ${maxBytes}`);
     }
-    const buffer = await handle.readFile();
+    const read = await readAtMost(handle, maxBytes);
+    const after = await handle.stat();
+    if (read.bytes > maxBytes || after.size > maxBytes) {
+      throw new Error(`${label} is at least ${Math.max(read.bytes, after.size)} bytes; limit is ${maxBytes}`);
+    }
     try {
-      return { content: decoder.decode(buffer), bytes: buffer.length };
+      return { content: decoder.decode(read.buffer), bytes: read.bytes };
     } catch {
       throw new Error(`${label} is not valid UTF-8 text`);
     }
@@ -315,7 +332,7 @@ export async function discoverAiHistory(root) {
 
 function categoryForSource(relativePath) {
   const name = path.posix.basename(relativePath).toLowerCase();
-  if (name === '.env' || name.startsWith('.env.')) return 'environment_secrets';
+  if (name === '.env' || name.startsWith('.env.') || name.endsWith('.env')) return 'environment_secrets';
   if (name === '.envrc' || name.startsWith('.envrc.')) return 'environment_secrets';
   if (name === '.dev.vars' || name.startsWith('.dev.vars.')) return 'environment_secrets';
   if (name === 'credentials') return 'environment_secrets';
@@ -385,6 +402,15 @@ export async function collectDataset({
     throw new Error(
       `artifact selection contains ${artifactInputs.length} files; limit is ${SERVER_LIMITS.maxArtifacts}`,
     );
+  }
+  for (const [kind, limit] of [
+    ['aws_cost', SERVER_LIMITS.maxAwsCostArtifacts],
+    ['dependency_audit', SERVER_LIMITS.maxDependencyAuditArtifacts],
+  ]) {
+    const count = artifactInputs.filter((input) => input.kind === kind).length;
+    if (count > limit) {
+      throw new Error(`${kind} artifact selection contains ${count} files; limit is ${limit}`);
+    }
   }
   const protectedAbsolutePaths = new Set(await Promise.all(protectedFiles.map(async (file) => {
     const resolved = path.resolve(file);
@@ -503,6 +529,11 @@ export async function collectDataset({
 
   const sourceBytes = sourceFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0);
   const artifactBytes = artifacts.reduce((sum, artifact) => sum + Buffer.byteLength(artifact.content), 0);
+  if (categories.size > SERVER_LIMITS.maxConsentCategories) {
+    throw new Error(
+      `selected data requires ${categories.size} consent categories; limit is ${SERVER_LIMITS.maxConsentCategories}`,
+    );
+  }
   return {
     sourceFiles,
     artifacts,

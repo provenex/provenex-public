@@ -110,11 +110,11 @@ function renderPreflight({ origin, command, target, dataset, outputs, aiHistoryR
   return `${lines.join('\n')}\n`;
 }
 
-async function confirmUpload(origin) {
-  if (!stdin.isTTY || !stdout.isTTY) {
+export async function confirmUpload(origin, { input = stdin, output = stdout } = {}) {
+  if (!input.isTTY || !output.isTTY) {
     throw new UsageError('upload requires interactive approval or explicit --yes');
   }
-  const prompt = createInterface({ input: stdin, output: stdout });
+  const prompt = createInterface({ input, output });
   try {
     const answer = await prompt.question(`Upload this bounded dataset to ${origin}? Type yes to continue: `);
     return answer.trim().toLowerCase() === 'yes';
