@@ -5,6 +5,9 @@ Provenex evaluation.
 
 ## Start here
 
+- [`cli/provenex-check/`](cli/provenex-check/): the public, consent-first CLI
+  collector for hosted source and telemetry checks. It contains no local
+  Provenex analysis engine.
 - [`docs/onboarding.md`](docs/onboarding.md): the single public end-to-end
   evaluation path, from connection and discovery through reviewed enforcement.
 - [`docs/install.md`](docs/install.md): scoped installation and component
@@ -35,6 +38,12 @@ In the console, **Data boundary → Your data** shows the exact most recent
 outbound scoring envelope. Do not configure an OTel exporter, the legacy
 `provenex-ingest` forwarder, or a customer file upload to send raw telemetry to
 the hosted Engine.
+
+Provenex Check is a separate, explicit upload boundary: its public CLI previews
+bounded source and export categories, obtains consent, and sends only that
+one-run evidence to the central multi-tenant Check service under the displayed
+retention policy. It is not the customer-local Edge path and must not be used as
+a continuous production telemetry forwarder.
 
 An authenticated Edge can import canonical OTLP and explicitly selected,
 supported vendor-audit files. The caller selects the source format; Edge does
