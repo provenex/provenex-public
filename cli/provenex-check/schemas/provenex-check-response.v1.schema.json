@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.provenex.ai/provenex-check-response.v1.schema.json",
+  "title": "Provenex Check response v1",
+  "type": "object",
+  "x-maxSerializedResponseBytes": 33554432,
+  "$comment": "status must equal signed_report.report.status. incomplete iff exit_code is 3; a complete report exits 0 with no findings and 1 with findings. The report command and target must match the approved request.",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "exit_code", "status", "service_release", "retention_policy", "signed_report"],
+  "properties": {
+    "schema_version": { "const": "provenex-check-response.v1" },
+    "run_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "exit_code": { "enum": [0, 1, 3] },
+    "status": { "enum": ["complete", "incomplete"] },
+    "service_release": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "Opaque deployed-service release identifier; consumers must not infer engine implementation details from it."
+    },
+    "retention_policy": { "$ref": "#/$defs/retentionPolicy" },
+    "signed_report": { "$ref": "#/$defs/signedReport" }
+  },
+  "$defs": {
+    "category": {
+      "enum": [
+        "credentials",
+        "agent_activity",
+        "runtime_reliability",
+        "cost_efficiency",
+        "dependency_safety",
+        "application_security",
+        "platform_hardening",
+        "data_governance",
+        "cross_signal"
+      ]
+    },
+    "retentionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "policy_id", "scope", "raw_evidence_retention_seconds", "derived_results_retention_seconds", "workspace_lifecycle", "workspace_deleted_before_response", "policy_url"],
+      "properties": {
+        "schema_version": { "const": "provenex-check-retention-policy.v1" },
+        "policy_id": { "const": "provenex-check-ephemeral-v1" },
+        "scope": { "const": "provenex-check-application" },
+        "raw_evidence_retention_seconds": { "const": 0 },
+        "derived_results_retention_seconds": { "const": 0 },
+        "workspace_lifecycle": { "const": "request-only" },
+        "workspace_deleted_before_response": { "const": true },
+        "policy_url": { "const": "https://github.com/provenex/provenex-public/blob/main/docs/provenex-check-data-policy.md" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "direct", "correlated", "tentative"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0, "maximum": 2000 },
+        "direct": { "type": "integer", "minimum": 0, "maximum": 2000 },
+        "correlated": { "type": "integer", "minimum": 0, "maximum": 2000 },
+        "tentative": { "type": "integer", "minimum": 0, "maximum": 2000 }
+      },
+      "$comment": "Evidence-level counts must sum to total and total must equal the emitted findings length."
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "disposition", "evidence_level", "title", "consequence", "evidence", "next_step"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^finding-[0-9]{4}$" },
+        "category": { "$ref": "#/$defs/category" },
+        "disposition": { "enum": ["confirmed", "requires_review", "preventable"] },
+        "evidence_level": { "enum": ["direct", "correlated", "tentative"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "consequence": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "evidence": { "type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$", "description": "Sanitized, bounded public evidence summary; never raw evidence or a private rule payload." },
+        "next_step": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "status", "detail"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^coverage-[0-9]{4}$" },
+        "category": { "$ref": "#/$defs/category" },
+        "status": { "enum": ["evaluated", "partial", "not_evaluated"] },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tool_version", "command", "target", "generated_at", "status", "summary", "conclusion", "findings", "coverage", "limitations"],
+      "properties": {
+        "schema_version": { "const": "provenex-check-public-report.v1" },
+        "tool_version": { "const": "0.1.0-alpha.2" },
+        "command": { "enum": ["scan", "audit"] },
+        "target": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^(?!\\s)(?!.*\\s$)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$", "x-maxUtf8Bytes": 255 },
+        "generated_at": { "type": "string", "format": "date-time", "maxLength": 35, "pattern": "^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$" },
+        "status": { "enum": ["complete", "incomplete"] },
+        "summary": { "$ref": "#/$defs/summary" },
+        "conclusion": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$", "description": "Sanitized, bounded customer-facing conclusion." },
+        "findings": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/finding" } },
+        "coverage": { "type": "array", "maxItems": 9, "items": { "$ref": "#/$defs/coverage" } },
+        "limitations": { "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" } }
+      },
+      "$comment": "Finding and coverage ids are sequential from 0001; coverage categories are unique. Display strings contain no control, format, or unpaired-surrogate code points."
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "public_key", "public_key_sha256", "signature", "meaning"],
+      "properties": {
+        "algorithm": { "const": "ed25519" },
+        "key_id": { "type": "string", "pattern": "^run-[0-9a-f]{16}$" },
+        "public_key": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "public_key_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "signature": { "type": "string", "pattern": "^[0-9a-f]{128}$" },
+        "meaning": { "const": "self-consistency-only" }
+      },
+      "$comment": "public_key_sha256 is SHA-256 of the raw 32-byte public key; key_id uses its first 16 hex characters. The response-provided key is not an issuer identity."
+    },
+    "signedReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "report", "canonical_report_json", "signature"],
+      "properties": {
+        "schema_version": { "const": "provenex-check-signed-report.v1" },
+        "report": { "$ref": "#/$defs/report" },
+        "canonical_report_json": { "type": "string", "maxLength": 16777216, "x-maxUtf8Bytes": 16777216, "description": "Compact JSON with recursively lexicographically sorted object keys; arrays preserve order." },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    }
+  }
+}

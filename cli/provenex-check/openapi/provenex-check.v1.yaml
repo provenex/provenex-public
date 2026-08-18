@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: Provenex Check API
+  version: 1.0.0
+  description: >-
+    Public wire contract for consented, bounded Provenex Check runs. This
+    contract describes collector inputs and a strict bounded public response,
+    not engine internals. Consumers reject unknown fields and any response that
+    does not declare the exact consented data policy. The included ephemeral
+    Ed25519 key provides report-envelope self-consistency only; it is not a
+    Provenex issuer identity or durable attestation. Terminal and HTML views are
+    rendered by the CLI, not returned by this API.
+externalDocs:
+  description: Provenex Check ephemeral data policy
+  url: https://github.com/provenex/provenex-public/blob/main/docs/provenex-check-data-policy.md
+servers:
+  - url: https://api.provenex.ai
+paths:
+  /v1/check/runs:
+    post:
+      operationId: createCheckRun
+      summary: Analyze a consented source and telemetry bundle
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: >-
+          Bounded public collector request: at most 8 consent categories, 10,000
+          source files, and 256 explicit or discovered artifacts, with at most
+          64 MiB of aggregate UTF-8 content. A scan may include only session,
+          conversation-export, and dependency-audit artifacts; runtime logs and cost evidence require
+          audit. AWS-cost and dependency-audit inputs are each capped at 32.
+        x-maxRequestBytes: 134217728
+        x-maxConsentCategories: 8
+        x-maxArtifacts: 256
+        x-maxAwsCostArtifacts: 32
+        x-maxDependencyAuditArtifacts: 32
+        content:
+          application/json:
+            schema:
+              $ref: ../schemas/provenex-check-request.v1.schema.json
+      responses:
+        '200':
+          description: >-
+            Strict public Check response with the mandatory applied policy and
+            an ephemeral self-consistency envelope around the public report DTO.
+            The CLI rejects a serialized response above 32 MiB.
+          x-maxResponseBytes: 33554432
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/provenex-check-response.v1.schema.json
+        '400':
+          description: Deserialized input violates consent, bounds, path/name grammar, or command-specific artifact rules
+        '401':
+          description: Missing or invalid API key
+        '402':
+          description: A Check subscription or trial entitlement is required or has expired
+        '403':
+          description: The authenticated tenant is inactive or is not authorized to run Check
+        '413':
+          description: Request exceeds server limits
+        '415':
+          description: Content-Type is not application/json
+        '422':
+          description: Well-formed JSON cannot deserialize into the strict request shape because fields are missing, unknown, mistyped, use unsupported enum values, or exceed a bounded request-array count
+        '429':
+          description: Plan or rate limit reached
+        '500':
+          description: The service could not safely process the run or produce the required response envelope
+      x-provenexCheckClientTimeouts:
+        uploadAndHeadersTotalMs: 1800000
+        responseBodyIdleMs: 60000
+        responseBodyTotalMs: 600000
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Provenex API key
