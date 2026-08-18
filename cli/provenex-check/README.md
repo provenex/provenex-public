@@ -17,19 +17,23 @@ locally. Server-rendered views and private engine fields are rejected.
 - Node.js 22 or newer
 - A Provenex API key for uploads (`--dry-run` needs no key)
 
-From this directory:
+The alpha npm manifest is private and intentionally unpublished. The unscoped
+`provenex-check` npm name is not reserved by this repository: do not install or
+execute a package with that name from npm or `npx`. Use a verified checkout of
+this repository instead.
+
+From this directory, test the checkout and optionally create a local link:
 
 ```sh
-npm install
+npm test
 npm link
 provenex-check --version
 ```
 
-For a published package, use `npm install --global provenex-check` or
-`npx provenex-check --help`.
-
-Running `npx provenex-check` with no subcommand defaults to `scan .`. Starting
-with an option (for example, `npx provenex-check --dry-run`) does the same.
+The examples below use the command created by that source-checkout link. You
+can avoid linking and invoke `node ./bin/provenex-check.js` directly. With no
+subcommand the CLI defaults to `scan .`; starting with an option such as
+`--dry-run` does the same.
 
 ## First run
 
@@ -62,13 +66,38 @@ provenex-check scan /path/to/project \
 ```
 
 The CLI asks for interactive approval. Automation must add `--yes`; otherwise
-a non-interactive upload fails closed. API keys are never accepted on the
-command line. As an alternative to the environment variable, store this JSON
-in `~/.config/provenex/check.json` and run `chmod 600` on the file:
+a non-interactive upload fails closed. Production API keys are never accepted
+on the command line and are eligible only for the pinned production origin. As
+an alternative to the production environment variable, store this JSON in
+`~/.config/provenex/check.json` and run `chmod 600` on the file:
 
 ```json
 { "api_key": "replace-with-your-key" }
 ```
+
+For a loopback development endpoint, set only a disposable local test token:
+
+```sh
+export PROVENEX_CHECK_DEV_API_KEY='local-test-token'
+provenex-check scan /path/to/synthetic-project \
+  --api-url http://127.0.0.1:8787
+```
+
+Loopback never reads `PROVENEX_API_KEY` or the production config file. Its
+preflight labels the endpoint non-production: do not submit real sensitive
+evidence or production credentials. The local server must still emulate and
+return the exact `provenex-check-ephemeral-v1` applied policy or the CLI rejects
+its response.
+
+The canonical home directory itself is not an eligible scan root; select a
+project subtree. Provenex, Codex, and Claude credential stores are always
+excluded when a broader eligible target contains them, including a custom
+`XDG_CONFIG_HOME`. Known Claude/Codex AI-history roots are pruned from generic
+source traversal. The CLI does not display or upload those local paths. After
+approval and key loading—but before any request—it also rejects selected source
+or artifact content containing the exact active bearer or its JSON-escaped
+representation. That diagnostic is redacted. `--dry-run` still reads no API
+key.
 
 ## Telemetry-assisted checks
 
@@ -97,7 +126,11 @@ web conversation export; the private engine content-discriminates the export
 and it receives the opaque label `conversation-export-001.json`. Other
 arbitrary `.json` files are rejected rather than silently interpreted as
 JSONL. The local basename is used only for this routing decision and is not
-sent to the API.
+sent to the API. A broad source scan always excludes any case variant of the
+basename `conversations.json`; a web export is eligible only through exact,
+explicit
+`--session-input`, which classifies it as `ai_session_history` in the preflight.
+Other artifact flags cannot relabel a web conversation export.
 
 ## Collection and safety boundary
 
@@ -106,25 +139,41 @@ sent to the API.
 - Directory symlinks and file symlinks are never followed.
 - Only a maintained list of code, configuration, manifest, lock, and `.env`
   text files is selected; invalid UTF-8 and over-limit inputs fail closed.
+- Generic configuration is a high-sensitivity upload category because JSON,
+  YAML, TOML, and similar files can contain credentials or customer data. The
+  exact high-sensitivity path list remains limited to recognized
+  credential-bearing names.
 - Credential-bearing project files such as `.envrc`, `.dev.vars`,
   `credentials`, `.npmrc`, `.pypirc`, `.netrc`, `.dockercfg`,
   `.dockerconfigjson`, `.terraformrc`, and `.yarnrc` are deliberately selected
   and shown as high-sensitivity paths before consent. The allowlist also covers
   common native/mobile build files and text formats including CSV, HTML, TXT,
   Gradle, Bazel, Make, Xcode configuration, and project files.
+- Known Provenex, Codex, and Claude credential stores are excluded before
+  source selection when they lie under an eligible target, and cannot be
+  explicitly selected as artifacts. Known Claude/Codex session-history roots
+  are pruned from generic traversal; discovery and explicit `--session-input`
+  are the consented routes. Other artifact flags cannot relabel files beneath
+  those roots. Local protected paths are never shown or uploaded.
 - Defaults are 5,000 source files, 1 MiB per source file, 16 MiB per telemetry
   artifact, and 64 MiB total. User overrides are capped at 10,000 files, 4 MiB
   per source file, 256 artifacts, 64 MiB per artifact, and 64 MiB total.
   Separately, the serialized JSON request is refused above the service's
   128 MiB body cap.
-- Git state is read with non-shelling, hook-disabled read-only Git commands.
+- Git state is read with non-shelling, read-only Git commands. The CLI resolves
+  an absolute executable only from absolute PATH directories outside the scan
+  root, excludes repo-owned shims, sanitizes Git injection variables and the
+  child PATH, and disables pagers, hooks, and configured filesystem monitors.
 - CLI-generated metadata never adds local absolute paths. Selected source,
   session, and log content can itself contain local paths or other secrets;
   review the high-sensitivity categories before approving an upload.
 - Report files must be explicitly requested and outside the scanned tree.
   Existing files are not replaced unless `--force` is given; symlinks are
   always rejected.
-- HTTPS is mandatory except for a loopback development server.
+- Production uploads are pinned to `https://api.provenex.ai`. `--api-url` and
+  `PROVENEX_CHECK_API_URL` accept only an HTTP or HTTPS loopback origin for
+  local development; arbitrary remote origins are rejected before an API key
+  is read.
 
 Use repeatable, quoted `--exclude` patterns to remove repository paths before
 they are read. Patterns are repository-relative, support `*`, `?`, and `**`,
@@ -145,8 +194,10 @@ high-sensitivity source paths, and explicit artifact paths. These local paths
 and patterns are not uploaded as request metadata; discovered session
 filenames are never displayed or uploaded.
 
-The preflight labels high-sensitivity categories and states that approved
-evidence goes to the central multi-tenant service. Consent is specifically to
+The production preflight labels high-sensitivity categories and states that
+approved evidence goes to the central multi-tenant service. A loopback
+preflight instead labels the endpoint non-production and displays the local
+development warning above. Consent in either case is specifically to
 [`provenex-check-ephemeral-v1`](https://github.com/provenex/provenex-public/blob/main/docs/provenex-check-data-policy.md): zero
 seconds of application-scope raw-evidence and derived-result retention, a
 request-only processing workspace, and workspace deletion before response.

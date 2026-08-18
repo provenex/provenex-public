@@ -62,6 +62,16 @@ displayed or uploaded. Explicit and discovered inputs share the 256-artifact
 and 64 MiB aggregate request bounds; exceeding either remains a fail-closed
 error rather than silently omitting sessions.
 
+Any case variant of the `conversations.json` basename is never swept into
+ordinary source or configuration during a broad scan. A supported ChatGPT or
+Claude web export enters the request only when the user supplies the exact
+basename through `--session-input`, at
+which point the preflight classifies it as high-sensitivity
+`ai_session_history`; other artifact flags cannot relabel it. Generic
+configuration is itself high-sensitivity because
+JSON, YAML, TOML, and similar formats can contain credentials or customer data,
+even when a filename is not on the narrower credential-path list.
+
 ### `provenex-check audit`
 
 `audit` is a deeper retrospective. It correlates supported agent sessions,
@@ -82,7 +92,10 @@ estimated work before requesting permission.
 This table is the intended product boundary, not a claim that billing,
 self-serve signup, recurring connectors, or plan entitlements ship in the
 current alpha. The alpha uses manually issued API keys and implements the
-bounded `scan` and explicit-export `audit` path only.
+bounded `scan` and explicit-export `audit` path only. Its npm manifest is
+private and intentionally unpublished. The unscoped `provenex-check` name is
+not reserved by this repository, so alpha users must run a verified source
+checkout rather than installing or executing that name from npm.
 
 | Tier | Product boundary |
 |---|---|
@@ -90,6 +103,21 @@ bounded `scan` and explicit-export `audit` path only.
 | Solo subscription | Longer history, recurring checks, supported connectors, spend tracking, code/CI gates, agent hooks, and egress policy enforcement. The engine remains server-side. |
 | Team | Shared UI, Policy Studio, reusable policy, environments, roles, approvals, evidence retention, and collaboration. |
 | Enterprise | Stronger tenancy and data controls, organization-wide connectors and identity, custom retention/regions, SSO, service guarantees, and optional dedicated/private deployment. |
+
+## Server-side telemetry adaptation
+
+For paid plans, the hosted engine may use models to propose mappings for
+previously unseen telemetry shapes and to update correlations without requiring
+a new CLI release. Model output is a proposal, not an enforcement decision: it
+must pass bounded schemas and deterministic gates, preserve coverage and
+uncertainty in the report, and require the applicable policy approval before it
+can affect an enforcement point.
+
+Tenant evidence remains tenant-scoped. Reusing any customer-provided telemetry
+to improve common mappings across tenants requires separately documented data
+rights, an explicit opt-in, and controls against reproducing customer content.
+The current alpha does not claim continuous learning or autonomous policy
+changes.
 
 An AI-agent skill or instruction file is advisory context. It can help an agent
 choose safer actions, but it is not an enforcement boundary. A claim that an
@@ -137,6 +165,31 @@ Before any network request, the CLI must show:
 The user must explicitly approve that preview. Non-interactive execution must
 use an explicit consent flag. Credentials are never accepted on the command
 line or reproduced in diagnostics.
+
+Production API access is pinned to `https://api.provenex.ai`. The CLI permits
+an alternate origin only when it is HTTP or HTTPS loopback for local
+development; a flag or environment variable cannot redirect an API key and
+approved evidence to another remote host. Production uses only
+`PROVENEX_API_KEY` or the owner-only production config. Loopback uses only a
+distinct `PROVENEX_CHECK_DEV_API_KEY` and never falls back to either production
+credential source. The loopback preflight labels the endpoint non-production
+and warns against real sensitive evidence or production keys. A loopback test
+server must still emulate the exact v1 applied retention policy; the client
+rejects a missing or different declaration.
+
+The canonical home directory is refused as a scan root; the user must select a
+project subtree. Known Provenex, Codex, and Claude credential stores are always
+excluded before source selection when they lie under a broader eligible target
+and cannot be selected explicitly as artifacts. Known Claude/Codex AI-history
+roots are pruned from generic source traversal, leaving explicit selection or
+bounded `--discover-ai-history` as the consent routes. Files beneath those
+roots require `--session-input` and cannot be relabeled with another artifact
+flag. The preflight discloses
+these protections without displaying or uploading local paths. After consent
+and origin-bound key loading, but before submission,
+the CLI fails closed if selected source or artifact content contains the exact
+active bearer or its distinct JSON-escaped representation. The error is
+redacted, and `--dry-run` continues to read no key.
 
 Authentication determines the tenant; a request cannot select or override a
 tenant identifier. The current public Check policy is the versioned

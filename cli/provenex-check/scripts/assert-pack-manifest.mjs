@@ -47,7 +47,7 @@ const actualFiles = manifest[0].files.map(({ path }) => path).sort();
 assert.deepEqual(
   actualFiles,
   EXPECTED_FILES,
-  'publishable package contents changed; review the public/private boundary and update this assertion intentionally',
+  'packed source contents changed; review the public/private boundary and update this assertion intentionally',
 );
 
 const executable = manifest[0].files.find(({ path }) => path === 'bin/provenex-check.js');

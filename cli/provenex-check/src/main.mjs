@@ -1,15 +1,23 @@
 import { createInterface } from 'node:readline/promises';
+import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { parseArgs, usage, VERSION } from './args.mjs';
 import {
   collectDataset,
   DEFAULT_EXCLUDED_DIRECTORIES,
   discoverAiHistory,
+  localHomePath,
   resolveScanRoot,
   SENSITIVE_CATEGORIES,
   targetLabelForRoot,
 } from './collector.mjs';
-import { loadApiKey, submitRun, validateApiOrigin } from './client.mjs';
+import {
+  apiKeyConfigPath,
+  isLoopbackApiOrigin,
+  loadApiKey,
+  submitRun,
+  validateApiOrigin,
+} from './client.mjs';
 import { prepareOutputs, writeReports } from './output.mjs';
 import { UsageError } from './errors.mjs';
 import { SERVER_LIMITS } from './limits.mjs';
@@ -39,9 +47,13 @@ function boundedList(values) {
 
 function renderPreflight({ origin, command, target, dataset, outputs, aiHistoryRequested }) {
   const sensitive = dataset.categories.filter((category) => SENSITIVE_CATEGORIES.has(category));
+  const localDevelopment = isLoopbackApiOrigin(origin);
   const lines = [
     'Provenex Check upload preflight',
     `API origin: ${origin}`,
+    localDevelopment
+      ? 'Endpoint class: non-production loopback development endpoint'
+      : 'Endpoint class: Provenex central multi-tenant service',
     `Command: ${command}`,
     `Target label: ${quoteLocal(target)}`,
     `Source files: ${dataset.sourceFiles.length} (${formatBytes(dataset.sourceBytes)} bytes)`,
@@ -53,6 +65,14 @@ function renderPreflight({ origin, command, target, dataset, outputs, aiHistoryR
     `Categories: ${dataset.categories.length ? dataset.categories.join(', ') : '(none)'}`,
     `High-sensitivity categories: ${sensitive.length ? sensitive.join(', ') : '(none)'}`,
     `Default exclusions: ${DEFAULT_EXCLUDED_DIRECTORIES.join(', ')}; all symlinks; non-selected file types`,
+    'Always-on local-auth exclusions: Provenex, Codex, and Claude credential',
+    'stores are excluded before selection; their local paths are neither',
+    'displayed nor uploaded.',
+    'Always-on AI-history exclusions: known Claude and Codex history roots are',
+    'pruned from ordinary source traversal; use --discover-ai-history or an',
+    'explicit artifact input to consent to supported session evidence.',
+    'Always-on web-export exclusion: conversations.json is never swept as',
+    'ordinary source/configuration; select it explicitly with --session-input.',
     dataset.userExcludePatterns.length
       ? `User exclusions (local only): ${boundedList(dataset.userExcludePatterns)}; ${dataset.userExcludedEntries} matched entries/directories pruned`
       : 'User exclusions: (none; add repeatable --exclude PATTERN)',
@@ -72,9 +92,20 @@ function renderPreflight({ origin, command, target, dataset, outputs, aiHistoryR
     'The CLI validates the response policy declaration; it cannot independently',
     'prove server-side deletion or create durable issuer authenticity.',
     '',
-    'This Check uploads the approved evidence to Provenex\'s central multi-tenant',
-    'service. The service must return this exact applied policy; a missing or',
-    'different policy causes the CLI to reject the entire response.',
+    ...(localDevelopment
+      ? [
+        'LOCAL DEVELOPMENT WARNING: this endpoint is not Provenex\'s central',
+        'service. Do not submit real sensitive evidence or a production API key.',
+        'Only PROVENEX_CHECK_DEV_API_KEY is eligible for this endpoint; production',
+        'credentials and config are ignored. The endpoint must still emulate the',
+        'exact v1 applied policy above; a missing or different policy causes the',
+        'CLI to reject the entire response.',
+      ]
+      : [
+        'This Check uploads the approved evidence to Provenex\'s central multi-tenant',
+        'service. The service must return this exact applied policy; a missing or',
+        'different policy causes the CLI to reject the entire response.',
+      ]),
   ];
   return `${lines.join('\n')}\n`;
 }
@@ -107,6 +138,20 @@ function buildRequest(command, target, dataset) {
   };
 }
 
+function assertActiveBearerAbsent(dataset, apiKey) {
+  const escaped = JSON.stringify(apiKey).slice(1, -1);
+  const representations = escaped === apiKey ? [apiKey] : [apiKey, escaped];
+  const selectedContent = [
+    ...dataset.sourceFiles.map((file) => file.content),
+    ...dataset.artifacts.map((artifact) => artifact.content),
+  ];
+  if (selectedContent.some((content) => representations.some((value) => content.includes(value)))) {
+    throw new Error(
+      'selected evidence contains the active API credential; redact it before uploading',
+    );
+  }
+}
+
 export async function main(argv) {
   const options = parseArgs(argv);
   if (options.help) {
@@ -123,10 +168,20 @@ export async function main(argv) {
   const target = targetLabelForRoot(root);
   const preparedOutputs = await prepareOutputs(options.outputs, root, options.force);
   const discovered = options.discoverAiHistory ? await discoverAiHistory(root) : [];
+  const localHome = localHomePath();
   const dataset = await collectDataset({
     root,
     artifactInputs: [...options.artifacts, ...discovered],
     excludes: options.excludes,
+    protectedFiles: [
+      apiKeyConfigPath(),
+      path.join(localHome, '.codex', 'auth.json'),
+      path.join(localHome, '.claude', '.credentials.json'),
+    ],
+    protectedDirectories: [
+      path.join(localHome, '.claude', 'projects'),
+      path.join(localHome, '.codex', 'sessions'),
+    ],
     limits: options.limits,
   });
   stdout.write(renderPreflight({
@@ -154,7 +209,8 @@ export async function main(argv) {
       `serialized API request is ${requestBytes} bytes; server body limit is ${SERVER_LIMITS.maxRequestBytes}`,
     );
   }
-  const apiKey = await loadApiKey();
+  const apiKey = await loadApiKey(origin);
+  assertActiveBearerAbsent(dataset, apiKey);
   const response = await submitRun({
     origin,
     apiKey,
@@ -169,4 +225,4 @@ export async function main(argv) {
   return response.exit_code;
 }
 
-export { buildRequest, renderPreflight };
+export { assertActiveBearerAbsent, buildRequest, renderPreflight };

@@ -8,6 +8,12 @@ import { validateHostedResponse } from './report.mjs';
 
 const MAX_CONFIG_BYTES = 64 * 1024;
 const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+const PRODUCTION_API_ORIGIN = 'https://api.provenex.ai';
+
+export function isLoopbackApiOrigin(origin) {
+  const { hostname } = new URL(origin);
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
 
 export function validateApiOrigin(value) {
   let url;
@@ -20,23 +26,34 @@ export function validateApiOrigin(value) {
   if (url.pathname !== '/' || url.search || url.hash) {
     throw new UsageError('API URL must be an origin without a path, query, or fragment');
   }
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
-    throw new UsageError('API URL must use HTTPS (HTTP is allowed only for loopback testing)');
+  const loopbackDevelopmentOrigin = isLoopbackApiOrigin(url.origin)
+    && (url.protocol === 'http:' || url.protocol === 'https:');
+  if (url.origin !== PRODUCTION_API_ORIGIN && !loopbackDevelopmentOrigin) {
+    throw new UsageError(
+      `API URL must be ${PRODUCTION_API_ORIGIN} (HTTP or HTTPS is allowed only for loopback development)`,
+    );
   }
   return url.origin;
 }
 
-function configPath() {
+export function apiKeyConfigPath() {
   const base = process.env.XDG_CONFIG_HOME
     ? path.resolve(process.env.XDG_CONFIG_HOME)
     : path.join(homedir(), '.config');
   return path.join(base, 'provenex', 'check.json');
 }
 
-export async function loadApiKey() {
+export async function loadApiKey(origin) {
+  const normalizedOrigin = validateApiOrigin(origin);
+  if (isLoopbackApiOrigin(normalizedOrigin)) {
+    if (process.env.PROVENEX_CHECK_DEV_API_KEY) return process.env.PROVENEX_CHECK_DEV_API_KEY;
+    throw new UsageError(
+      'Loopback development API key not found; set PROVENEX_CHECK_DEV_API_KEY. '
+      + 'Loopback endpoints never read PROVENEX_API_KEY or the production API key config file.',
+    );
+  }
   if (process.env.PROVENEX_API_KEY) return process.env.PROVENEX_API_KEY;
-  const file = configPath();
+  const file = apiKeyConfigPath();
   let handle;
   try {
     handle = await open(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0));

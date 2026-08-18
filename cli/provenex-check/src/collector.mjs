@@ -60,6 +60,16 @@ const MAX_SOURCE_ENTRIES = 200_000;
 const MAX_SOURCE_DIRECTORIES = 50_000;
 const METADATA_READ_CHUNK_BYTES = 4 * 1024;
 
+export function localHomePath() {
+  return process.env.HOME ? path.resolve(process.env.HOME) : homedir();
+}
+
+function isEqualOrWithin(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative === ''
+    || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
 function normalizeRelative(root, absolutePath) {
   const relative = path.relative(root, absolutePath);
   if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
@@ -92,6 +102,7 @@ function localRelative(root, absolutePath) {
 
 function isSourceFile(name) {
   const lower = name.toLowerCase();
+  if (lower === 'conversations.json') return false;
   if (lower === '.env' || lower.startsWith('.env.')) return true;
   if (lower === '.envrc' || lower.startsWith('.envrc.')) return true;
   if (lower === '.dev.vars' || lower.startsWith('.dev.vars.')) return true;
@@ -133,7 +144,12 @@ async function readRegularUtf8(filePath, maxBytes, label) {
   }
 }
 
-async function enumerate(root, excludePatterns) {
+async function enumerate(
+  root,
+  excludePatterns,
+  protectedAbsolutePaths,
+  protectedAbsoluteDirectories,
+) {
   const files = [];
   const isUserExcluded = createExcludeMatcher(excludePatterns);
   let userExcludedEntries = 0;
@@ -156,6 +172,8 @@ async function enumerate(root, excludePatterns) {
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
       const absolute = path.join(directory, entry.name);
+      if (protectedAbsolutePaths.has(path.resolve(absolute))) continue;
+      if (entry.isDirectory() && protectedAbsoluteDirectories.has(path.resolve(absolute))) continue;
       const relative = localRelative(root, absolute);
       if (isUserExcluded(relative)) {
         userExcludedEntries += 1;
@@ -289,7 +307,7 @@ async function discoverUnder(directory, root, state) {
 
 export async function discoverAiHistory(root) {
   const state = { directories: 0, entries: 0, examined: 0, metadataBytes: 0, matches: [] };
-  const userHome = process.env.HOME ? path.resolve(process.env.HOME) : homedir();
+  const userHome = localHomePath();
   await discoverUnder(path.join(userHome, '.claude', 'projects'), root, state);
   await discoverUnder(path.join(userHome, '.codex', 'sessions'), root, state);
   return state.matches;
@@ -330,6 +348,14 @@ export async function resolveScanRoot(targetPath) {
   if (!info.isDirectory()) throw new Error('scan path must be a directory');
   const root = await realpath(requested);
   if (path.parse(root).root === root) throw new Error('refusing to scan a filesystem root');
+  const configuredHome = path.resolve(localHomePath());
+  const canonicalHome = await realpath(configuredHome).catch((error) => {
+    if (error?.code === 'ENOENT') return configuredHome;
+    throw new Error('unable to canonicalize the home-directory scan boundary');
+  });
+  if (isEqualOrWithin(root, canonicalHome)) {
+    throw new Error('refusing to scan the home directory or one of its ancestors; select a project subdirectory');
+  }
   return root;
 }
 
@@ -347,13 +373,48 @@ export function targetLabelForRoot(root) {
   return `${bounded}...`;
 }
 
-export async function collectDataset({ root, artifactInputs, excludes = [], limits }) {
+export async function collectDataset({
+  root,
+  artifactInputs,
+  excludes = [],
+  protectedFiles = [],
+  protectedDirectories = [],
+  limits,
+}) {
   if (artifactInputs.length > SERVER_LIMITS.maxArtifacts) {
     throw new Error(
       `artifact selection contains ${artifactInputs.length} files; limit is ${SERVER_LIMITS.maxArtifacts}`,
     );
   }
-  const selection = await enumerate(root, excludes);
+  const protectedAbsolutePaths = new Set(await Promise.all(protectedFiles.map(async (file) => {
+    const resolved = path.resolve(file);
+    try {
+      return await realpath(resolved);
+    } catch (error) {
+      if (error?.code === 'ENOENT') return resolved;
+      throw new Error('unable to canonicalize a protected local credential store');
+    }
+  })));
+  const protectedAbsoluteDirectories = new Set(await Promise.all(protectedDirectories.map(async (directory) => {
+    const resolved = path.resolve(directory);
+    try {
+      return await realpath(resolved);
+    } catch (error) {
+      if (error?.code === 'ENOENT') return resolved;
+      throw new Error('unable to canonicalize a protected AI-history directory');
+    }
+  })));
+  if ([...protectedAbsoluteDirectories].some((directory) => isEqualOrWithin(directory, root))) {
+    throw new Error(
+      'refusing to scan a protected AI-history directory; use explicit AI-history consent from a project scan',
+    );
+  }
+  const selection = await enumerate(
+    root,
+    excludes,
+    protectedAbsolutePaths,
+    protectedAbsoluteDirectories,
+  );
   const candidateFiles = selection.files;
   if (candidateFiles.length > limits.maxFiles) {
     throw new Error(`source selection contains ${candidateFiles.length} files; limit is ${limits.maxFiles}`);
@@ -390,9 +451,25 @@ export async function collectDataset({ root, artifactInputs, excludes = [], limi
 
   for (const input of artifactInputs) {
     const absolute = path.resolve(input.path);
+    const basename = path.basename(absolute);
+    const canonicalAbsolute = await realpath(absolute).catch((error) => {
+      if (error?.code === 'ENOENT') return absolute;
+      throw error;
+    });
+    if (protectedAbsolutePaths.has(canonicalAbsolute)) {
+      throw new Error('a protected local credential store cannot be selected as an artifact');
+    }
+    if (basename.toLowerCase() === 'conversations.json' && input.kind !== 'session') {
+      throw new Error('web conversation exports require explicit --session-input consent');
+    }
+    if (
+      [...protectedAbsoluteDirectories].some((directory) => isEqualOrWithin(directory, canonicalAbsolute))
+      && input.kind !== 'session'
+    ) {
+      throw new Error('artifacts under protected AI-history roots require explicit --session-input consent');
+    }
     let kind = input.kind;
     if (kind === 'session') {
-      const basename = path.basename(absolute);
       if (!input.discovered && basename === 'conversations.json') {
         kind = 'conversation_export';
       } else if (path.extname(basename).toLowerCase() !== '.jsonl') {
@@ -444,6 +521,7 @@ export async function collectDataset({ root, artifactInputs, excludes = [], limi
 }
 
 export const SENSITIVE_CATEGORIES = new Set([
+  'configuration',
   'environment_secrets',
   'ai_session_history',
   'platform_logs',

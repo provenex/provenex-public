@@ -33,7 +33,8 @@ Commands collect a bounded, consented dataset and send it to the hosted
 Provenex API. No analysis engine is bundled or downloaded.
 
 Options:
-  --api-url URL              API origin (or PROVENEX_CHECK_API_URL)
+  --api-url URL              Loopback development override only; production is
+                             pinned to https://api.provenex.ai
   --session-input PATH       Add session JSONL or conversations.json (repeatable)
   --fly-log PATH             Add a Fly log export (repeatable)
   --cloudwatch-log PATH      Add a CloudWatch log export (repeatable)
@@ -54,8 +55,17 @@ Options:
   --help                     Show this help
   --version                  Show the version
 
-The API key is read only from PROVENEX_API_KEY or an owner-only config file at
-~/.config/provenex/check.json (or $XDG_CONFIG_HOME/provenex/check.json).`;
+The production API key is read only from PROVENEX_API_KEY or an owner-only
+config file at ~/.config/provenex/check.json (or
+$XDG_CONFIG_HOME/provenex/check.json). Loopback development endpoints read
+only PROVENEX_CHECK_DEV_API_KEY and never fall back to a production key/config.
+PROVENEX_CHECK_API_URL follows the same loopback-only override rule as
+--api-url; arbitrary remote origins are rejected before any key is read.
+Known Provenex, Codex, and Claude credential stores are always excluded from
+collection. Known Claude/Codex AI-history roots and conversations.json exports
+are never swept as ordinary source. Their local paths are not displayed or
+uploaded; use the explicit AI-history options to consent to session evidence.
+Scanning the canonical home directory is refused; select a project subtree.`;
 }
 
 function takeValue(argv, index, inlineValue, flag) {

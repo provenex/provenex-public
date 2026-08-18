@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { createServer } from 'node:http';
 import {
+  chmod,
   mkdtemp,
   mkdir,
   readFile,
@@ -26,6 +27,7 @@ import { validateHostedResponse } from '../src/report.mjs';
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = path.join(PACKAGE_ROOT, 'bin', 'provenex-check.js');
 const TEST_TOKEN = 'pvx_test_token_never_print_this';
+const TEST_DEV_TOKEN = 'pvx_dev_test_token_never_print_this';
 const TEST_KEYS = generateKeyPairSync('ed25519');
 const TEST_PUBLIC_KEY = TEST_KEYS.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
 const TEST_PUBLIC_KEY_SHA256 = createHash('sha256').update(TEST_PUBLIC_KEY).digest('hex');
@@ -140,6 +142,7 @@ function runCli(args, { env = {}, input } = {}) {
       env: {
         ...process.env,
         PROVENEX_API_KEY: '',
+        PROVENEX_CHECK_DEV_API_KEY: '',
         PROVENEX_CHECK_API_URL: '',
         ...env,
       },
@@ -223,11 +226,15 @@ test('posts the public request shape, writes explicit outputs, and preserves ser
     '--json', jsonOutput,
     '--html', htmlOutput,
   ], {
-    env: { PROVENEX_API_KEY: TEST_TOKEN, XDG_CONFIG_HOME: config },
+    env: {
+      PROVENEX_API_KEY: TEST_TOKEN,
+      PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN,
+      XDG_CONFIG_HOME: config,
+    },
   });
 
   assert.equal(result.code, 1, result.stderr);
-  assert.equal(authorization, `Bearer ${TEST_TOKEN}`);
+  assert.equal(authorization, `Bearer ${TEST_DEV_TOKEN}`);
   assert.equal(captured.schema_version, 'provenex-check-request.v1');
   assert.equal(captured.command, 'scan');
   assert.equal(captured.target, path.basename(project));
@@ -251,8 +258,169 @@ test('posts the public request shape, writes explicit outputs, and preserves ser
   assert.match(result.stdout, /self-consistency checking only/);
   assert.match(result.stdout, /Data policy: provenex-check-ephemeral-v1/);
   assert.ok(result.stdout.includes(session));
-  assert.ok(!result.stdout.includes(TEST_TOKEN));
-  assert.ok(!result.stderr.includes(TEST_TOKEN));
+  assert.ok(!result.stdout.includes(TEST_DEV_TOKEN));
+  assert.ok(!result.stderr.includes(TEST_DEV_TOKEN));
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_TOKEN));
+});
+
+test('preserves repeated internal spaces and NBSP in the requested and returned target', async (t) => {
+  const base = await temporaryDirectory(t);
+  const target = 'solo  founder\u00a0project';
+  const project = path.join(base, target);
+  await mkdir(project);
+  await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
+
+  let captured;
+  const origin = await mockServer(t, async (request, response) => {
+    captured = JSON.parse(await readRequest(request));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse({ target })));
+  });
+  const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
+  });
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(captured.target, target);
+  assert.equal(targetLabelForRoot(project), target);
+  assert.match(result.stdout, /No findings were emitted/);
+});
+
+test('repository Git inspection cannot execute a configured fsmonitor command', async (t) => {
+  const { base, project } = await makeProject(t);
+  const sentinel = path.join(base, 'fsmonitor-executed');
+  const fsmonitor = path.join(base, 'malicious-fsmonitor.cjs');
+  await writeFile(
+    fsmonitor,
+    `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'executed');\nprocess.stdout.write('builtin:test-token\\n');\n`,
+  );
+  await chmod(fsmonitor, 0o700);
+
+  assert.equal(spawnSync('git', ['init', '-q', project], { shell: false }).status, 0);
+  assert.equal(spawnSync('git', ['-C', project, 'add', 'app.js'], { shell: false }).status, 0);
+  assert.equal(
+    spawnSync('git', ['-C', project, 'config', '--local', 'core.fsmonitor', fsmonitor], { shell: false }).status,
+    0,
+  );
+
+  const unprotected = spawnSync(
+    'git',
+    ['-C', project, 'ls-files', '-z', '--others', '--exclude-standard'],
+    { shell: false },
+  );
+  assert.equal(unprotected.status, 0, unprotected.stderr?.toString('utf8'));
+  assert.equal(await readFile(sentinel, 'utf8'), 'executed');
+  await rm(sentinel);
+
+  const result = await runCli(['scan', project, '--dry-run']);
+  assert.equal(result.code, 0, result.stderr);
+  await assert.rejects(readFile(sentinel), (error) => error?.code === 'ENOENT');
+});
+
+test('Git subprocesses never inherit production or development API keys', async (t) => {
+  const { base, project } = await makeProject(t);
+  const fakeBin = path.join(base, 'fake-bin');
+  const git = path.join(fakeBin, 'git');
+  const observations = path.join(base, 'git-environment-observations');
+  await mkdir(fakeBin);
+  await writeFile(
+    git,
+    `#!${process.execPath}\nconst fs = require('node:fs');\nconst observed = { production: process.env.PROVENEX_API_KEY ?? null, development: process.env.PROVENEX_CHECK_DEV_API_KEY ?? null, execPath: process.env.GIT_EXEC_PATH ?? null, parameters: process.env.GIT_CONFIG_PARAMETERS ?? null, count: process.env.GIT_CONFIG_COUNT ?? null, key0: process.env.GIT_CONFIG_KEY_0 ?? null, value0: process.env.GIT_CONFIG_VALUE_0 ?? null, path: process.env.PATH };\nfs.appendFileSync(${JSON.stringify(observations)}, JSON.stringify(observed) + '\\n');\nif (process.argv.includes('rev-parse')) process.stdout.write('true\\n');\nelse if (process.argv.includes('--cached')) process.stdout.write('app.js\\0');\n`,
+  );
+  await chmod(git, 0o700);
+
+  const result = await runCli(['scan', project, '--dry-run'], {
+    env: {
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+      PROVENEX_API_KEY: TEST_TOKEN,
+      PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN,
+      GIT_EXEC_PATH: path.join(project, 'malicious-git-exec-path'),
+      GIT_CONFIG_PARAMETERS: "'core.fsmonitor=malicious'",
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'core.fsmonitor',
+      GIT_CONFIG_VALUE_0: 'malicious',
+    },
+  });
+  assert.equal(result.code, 0, result.stderr);
+  const observed = (await readFile(observations, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.equal(observed.length, 4);
+  for (const entry of observed) {
+    assert.equal(entry.production, null);
+    assert.equal(entry.development, null);
+    assert.equal(entry.execPath, null);
+    assert.equal(entry.parameters, null);
+    assert.equal(entry.count, null);
+    assert.equal(entry.key0, null);
+    assert.equal(entry.value0, null);
+    for (const directory of entry.path.split(path.delimiter)) {
+      assert.equal(path.isAbsolute(directory), true);
+      const relative = path.relative(project, directory);
+      assert.ok(relative === '..' || relative.startsWith(`..${path.sep}`));
+      assert.equal(
+        path.basename(directory).toLowerCase() === '.bin'
+          && path.basename(path.dirname(directory)).toLowerCase() === 'node_modules',
+        false,
+      );
+    }
+  }
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_TOKEN));
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_DEV_TOKEN));
+});
+
+test('Git resolution skips target and parent-workspace node_modules shims', {
+  skip: process.platform === 'win32',
+}, async (t) => {
+  const base = await temporaryDirectory(t);
+  const workspace = path.join(base, 'workspace');
+  const project = path.join(workspace, 'packages', 'app');
+  const targetBin = path.join(project, 'node_modules', '.bin');
+  const workspaceBin = path.join(workspace, 'node_modules', '.bin');
+  const targetSentinel = path.join(base, 'target-shim-executed');
+  const workspaceSentinel = path.join(base, 'workspace-shim-executed');
+  await mkdir(targetBin, { recursive: true });
+  await mkdir(workspaceBin, { recursive: true });
+  await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
+
+  for (const [directory, sentinel] of [
+    [targetBin, targetSentinel],
+    [workspaceBin, workspaceSentinel],
+  ]) {
+    const shim = path.join(directory, 'git');
+    await writeFile(
+      shim,
+      `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'executed');\nprocess.stdout.write('true\\n');\n`,
+    );
+    await chmod(shim, 0o700);
+  }
+
+  assert.equal(spawnSync('git', ['init', '-q', project], { shell: false }).status, 0);
+  assert.equal(spawnSync('git', ['-C', project, 'add', 'app.js'], { shell: false }).status, 0);
+
+  const captured = [];
+  const origin = await mockServer(t, async (request, response) => {
+    captured.push(JSON.parse(await readRequest(request)));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse({ target: 'app' })));
+  });
+  const safeFallback = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+    env: {
+      PATH: `${targetBin}${path.delimiter}${workspaceBin}${path.delimiter}${process.env.PATH}`,
+      PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN,
+    },
+  });
+  assert.equal(safeFallback.code, 0, safeFallback.stderr);
+  assert.equal(captured[0].source_files.find((file) => file.relative_path === 'app.js').git_state, 'tracked');
+
+  const unknownFallback = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+    env: {
+      PATH: `${targetBin}${path.delimiter}${workspaceBin}`,
+      PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN,
+    },
+  });
+  assert.equal(unknownFallback.code, 0, unknownFallback.stderr);
+  assert.equal(captured[1].source_files.find((file) => file.relative_path === 'app.js').git_state, 'unknown');
+  await assert.rejects(readFile(targetSentinel), (error) => error?.code === 'ENOENT');
+  await assert.rejects(readFile(workspaceSentinel), (error) => error?.code === 'ENOENT');
 });
 
 test('non-interactive upload without --yes fails before reading a key or calling API', async (t) => {
@@ -271,27 +439,243 @@ test('non-interactive upload without --yes fails before reading a key or calling
   assert.match(result.stderr, /interactive approval or explicit --yes/);
 });
 
-test('missing key gives honest alpha trial instructions and remains a local usage error', async (t) => {
+test('missing production key gives honest alpha trial instructions and remains a local usage error', async (t) => {
   const { project, config } = await makeProject(t);
+  const result = await runCli(['scan', project, '--yes'], {
+    env: { XDG_CONFIG_HOME: config },
+  });
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /obtain a Check API key from your Provenex trial administrator/);
+  assert.match(result.stderr, /self-serve signup is not available in alpha/);
+});
+
+test('loopback uses only its dev key and ignores production environment and config credentials', async (t) => {
+  const { project, config } = await makeProject(t);
+  const productionConfigDirectory = path.join(config, 'provenex');
+  const productionConfig = path.join(productionConfigDirectory, 'check.json');
+  await mkdir(productionConfigDirectory);
+  await writeFile(productionConfig, JSON.stringify({ api_key: 'production-config-token' }));
+  await chmod(productionConfig, 0o600);
+
   let requests = 0;
   const origin = await mockServer(t, (_request, response) => {
     requests += 1;
     response.end();
   });
   const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-    env: { XDG_CONFIG_HOME: config },
+    env: { PROVENEX_API_KEY: TEST_TOKEN, XDG_CONFIG_HOME: config },
   });
   assert.equal(result.code, 2);
   assert.equal(requests, 0);
-  assert.match(result.stderr, /obtain a Check API key from your Provenex trial administrator/);
-  assert.match(result.stderr, /self-serve signup is not available in alpha/);
+  assert.match(result.stdout, /Endpoint class: non-production loopback development endpoint/);
+  assert.match(result.stdout, /Do not submit real sensitive evidence or a production API key/);
+  assert.doesNotMatch(result.stdout, /uploads the approved evidence to Provenex's central multi-tenant/);
+  assert.match(result.stderr, /set PROVENEX_CHECK_DEV_API_KEY/);
+  assert.match(result.stderr, /never read PROVENEX_API_KEY or the production API key config/);
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_TOKEN));
+  assert.ok(!`${result.stdout}${result.stderr}`.includes('production-config-token'));
 });
 
-test('rejects non-loopback HTTP as a usage error', async (t) => {
+test('home-directory and ancestor scan roots are refused while project descendants remain eligible', {
+  skip: process.platform === 'win32',
+}, async (t) => {
+  const base = await temporaryDirectory(t);
+  const fakeHome = path.join(base, 'home');
+  const project = path.join(fakeHome, 'project');
+  await mkdir(project, { recursive: true });
+  await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
+
+  for (const refused of [fakeHome, base]) {
+    const result = await runCli(['scan', refused, '--dry-run'], { env: { HOME: fakeHome } });
+    assert.equal(result.code, 3);
+    assert.match(result.stderr, /home directory or one of its ancestors/);
+  }
+  const allowed = await runCli(['scan', project, '--dry-run'], { env: { HOME: fakeHome } });
+  assert.equal(allowed.code, 0, allowed.stderr);
+});
+
+test('owner credential config is excluded for custom and canonicalized XDG paths', {
+  skip: process.platform === 'win32',
+}, async (t) => {
+  for (const mode of ['custom-xdg', 'symlinked-xdg']) {
+    const base = await temporaryDirectory(t);
+    const project = path.join(base, `credential-store-${mode}`);
+    const fakeHome = path.join(base, 'home');
+    const actualConfigBase = path.join(project, 'actual-config');
+    const configDirectory = path.join(actualConfigBase, 'provenex');
+    const configFile = path.join(configDirectory, 'check.json');
+    const configSecret = `owner-config-secret-${mode}`;
+    await mkdir(configDirectory, { recursive: true });
+    await mkdir(fakeHome);
+    await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
+    await writeFile(configFile, JSON.stringify({ api_key: configSecret }));
+    await chmod(configFile, 0o600);
+
+    let xdgConfigHome = actualConfigBase;
+    if (mode === 'symlinked-xdg') {
+      xdgConfigHome = path.join(base, 'config-link');
+      await symlink(actualConfigBase, xdgConfigHome);
+    }
+
+    let captured;
+    const origin = await mockServer(t, async (request, response) => {
+      captured = JSON.parse(await readRequest(request));
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(validResponse({ target: path.basename(project) })));
+    });
+    const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+      env: {
+        HOME: fakeHome,
+        XDG_CONFIG_HOME: xdgConfigHome,
+        PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN,
+      },
+    });
+
+    assert.equal(result.code, 0, `${mode}: ${result.stderr}`);
+    assert.ok(!captured.source_files.some((file) => file.relative_path.endsWith('provenex/check.json')));
+    assert.ok(!JSON.stringify(captured).includes(configSecret));
+    assert.match(result.stdout, /Always-on local-auth exclusions/);
+    assert.ok(!`${result.stdout}${result.stderr}`.includes(configFile));
+
+    const explicitConfigFile = path.join(xdgConfigHome, 'provenex', 'check.json');
+    const explicit = await runCli([
+      'scan', project, '--dependency-audit', explicitConfigFile, '--dry-run',
+    ], {
+      env: { HOME: fakeHome, XDG_CONFIG_HOME: xdgConfigHome },
+    });
+    assert.equal(explicit.code, 3);
+    assert.match(explicit.stderr, /protected local credential store cannot be selected/);
+    assert.ok(!`${explicit.stdout}${explicit.stderr}`.includes(explicitConfigFile));
+    assert.ok(!`${explicit.stdout}${explicit.stderr}`.includes(configSecret));
+  }
+});
+
+test('known AI-history roots and descendants cannot become generic scan roots', async (t) => {
+  const base = await temporaryDirectory(t);
+  const fakeHome = path.join(base, 'home');
+  const codexSessions = path.join(fakeHome, '.codex', 'sessions');
+  const claudeProjects = path.join(fakeHome, '.claude', 'projects');
+  const codexDescendant = path.join(codexSessions, '2026', '08');
+  await mkdir(codexDescendant, { recursive: true });
+  await mkdir(claudeProjects, { recursive: true });
+  await writeFile(path.join(codexDescendant, 'session.json'), '{"sensitive":true}\n');
+  const explicitSession = path.join(codexDescendant, 'explicit-session.jsonl');
+  await writeFile(explicitSession, '{"type":"assistant","message":"supported"}\n');
+  await writeFile(path.join(claudeProjects, 'history.json'), '{"sensitive":true}\n');
+
+  for (const candidate of [codexSessions, codexDescendant, claudeProjects]) {
+    const result = await runCli(['scan', candidate, '--dry-run'], { env: { HOME: fakeHome } });
+    assert.equal(result.code, 3);
+    assert.match(result.stderr, /refusing to scan a protected AI-history directory/);
+  }
+
+  const project = path.join(base, 'project');
+  await mkdir(project);
+  await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
+  const mislabeled = await runCli([
+    'scan', project, '--dependency-audit', explicitSession, '--dry-run',
+  ], { env: { HOME: fakeHome } });
+  assert.equal(mislabeled.code, 3);
+  assert.match(mislabeled.stderr, /require explicit --session-input consent/);
+  assert.ok(!`${mislabeled.stdout}${mislabeled.stderr}`.includes(explicitSession));
+
+  const consented = await runCli([
+    'scan', project, '--session-input', explicitSession, '--dry-run',
+  ], { env: { HOME: fakeHome } });
+  assert.equal(consented.code, 0, consented.stderr);
+  assert.match(consented.stdout, /High-sensitivity categories: ai_session_history/);
+  assert.match(consented.stdout, /session: .*explicit-session\.jsonl/);
+});
+
+test('known Codex auth store cannot be swept or explicitly selected', async (t) => {
+  const { base, project } = await makeProject(t);
+  const fakeHome = path.join(base, 'home');
+  const authDirectory = path.join(fakeHome, '.codex');
+  const authFile = path.join(authDirectory, 'auth.json');
+  const authSecret = 'codex-auth-secret-must-not-leave';
+  await mkdir(authDirectory, { recursive: true });
+  await writeFile(authFile, JSON.stringify({ token: authSecret }));
+
+  const result = await runCli([
+    'scan', project, '--dependency-audit', authFile, '--dry-run',
+  ], { env: { HOME: fakeHome } });
+  assert.equal(result.code, 3);
+  assert.match(result.stderr, /protected local credential store cannot be selected/);
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(authFile));
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(authSecret));
+});
+
+test('active bearer in selected evidence fails closed before a request', async (t) => {
+  const exactKey = 'pvx_dev_active_bearer_in_source';
+  const exact = await makeProject(t, {
+    files: {
+      'app.js': 'export const safe = true;\n',
+      '.env': `ACTIVE_TOKEN=${exactKey}\n`,
+    },
+  });
+  let exactRequests = 0;
+  const exactOrigin = await mockServer(t, (_request, response) => {
+    exactRequests += 1;
+    response.end();
+  });
+
+  const dryRun = await runCli(['scan', exact.project, '--dry-run'], {
+    env: { PROVENEX_CHECK_DEV_API_KEY: exactKey },
+  });
+  assert.equal(dryRun.code, 0, dryRun.stderr);
+  assert.match(dryRun.stdout, /no API key was read/);
+
+  const exactResult = await runCli(['scan', exact.project, '--api-url', exactOrigin, '--yes'], {
+    env: { PROVENEX_CHECK_DEV_API_KEY: exactKey },
+  });
+  assert.equal(exactResult.code, 3);
+  assert.equal(exactRequests, 0);
+  assert.match(exactResult.stderr, /selected evidence contains the active API credential/);
+  assert.ok(!`${exactResult.stdout}${exactResult.stderr}`.includes(exactKey));
+
+  const escapedKey = 'pvx_dev_"escaped\\bearer';
+  const escaped = await makeProject(t);
+  const session = path.join(escaped.base, 'session.jsonl');
+  const serializedSession = `${JSON.stringify({ message: escapedKey })}\n`;
+  assert.equal(serializedSession.includes(escapedKey), false);
+  await writeFile(session, serializedSession);
+  let escapedRequests = 0;
+  const escapedOrigin = await mockServer(t, (_request, response) => {
+    escapedRequests += 1;
+    response.end();
+  });
+  const escapedResult = await runCli([
+    'scan', escaped.project,
+    '--session-input', session,
+    '--api-url', escapedOrigin,
+    '--yes',
+  ], { env: { PROVENEX_CHECK_DEV_API_KEY: escapedKey } });
+  assert.equal(escapedResult.code, 3);
+  assert.equal(escapedRequests, 0);
+  assert.match(escapedResult.stderr, /selected evidence contains the active API credential/);
+  assert.ok(!`${escapedResult.stdout}${escapedResult.stderr}`.includes(escapedKey));
+});
+
+test('pins remote API access and permits only loopback development overrides', async (t) => {
   const { project } = await makeProject(t);
-  const result = await runCli(['scan', project, '--api-url', 'http://example.com', '--dry-run']);
-  assert.equal(result.code, 2);
-  assert.match(result.stderr, /must use HTTPS/);
+  for (const candidate of [
+    { args: ['--api-url', 'http://example.com'], env: {} },
+    { args: ['--api-url', 'https://example.com'], env: {} },
+    { args: [], env: { PROVENEX_CHECK_API_URL: 'https://example.com' } },
+  ]) {
+    const result = await runCli(['scan', project, ...candidate.args, '--yes'], {
+      env: { PROVENEX_API_KEY: TEST_TOKEN, ...candidate.env },
+    });
+    assert.equal(result.code, 2, result.stderr);
+    assert.match(result.stderr, /must be https:\/\/api\.provenex\.ai/);
+    assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_TOKEN));
+  }
+
+  const loopbackHttps = await runCli([
+    'scan', project, '--api-url', 'https://localhost:4443', '--dry-run',
+  ]);
+  assert.equal(loopbackHttps.code, 0, loopbackHttps.stderr);
+  assert.match(loopbackHttps.stdout, /API origin: https:\/\/localhost:4443/);
 });
 
 test('collection bounds and symlink artifacts fail as operational errors', async (t) => {
@@ -341,14 +725,14 @@ test('API failures are operational and never print a token or response body', as
   const origin = await mockServer(t, async (request, response) => {
     await readRequest(request);
     response.writeHead(500, { 'content-type': 'text/plain', 'x-request-id': 'safe-request-id' });
-    response.end(`server accidentally echoed ${TEST_TOKEN}`);
+    response.end(`server accidentally echoed ${TEST_DEV_TOKEN}`);
   });
   const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-    env: { PROVENEX_API_KEY: TEST_TOKEN },
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
   });
   assert.equal(result.code, 3);
   assert.match(result.stderr, /HTTP 500 \(request safe-request-id\)/);
-  assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_TOKEN));
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_DEV_TOKEN));
   assert.ok(!result.stderr.includes('server accidentally'));
 });
 
@@ -366,7 +750,7 @@ test('rejects legacy server-rendered and private response fields', async (t) => 
     response.end(JSON.stringify(legacy));
   });
   const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-    env: { PROVENEX_API_KEY: TEST_TOKEN },
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
   });
   assert.equal(result.code, 3);
   assert.match(result.stderr, /response has unsupported fields/);
@@ -384,7 +768,7 @@ test('rejects a response whose mandatory retention policy differs from consent',
     response.end(JSON.stringify(mismatched));
   });
   const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-    env: { PROVENEX_API_KEY: TEST_TOKEN },
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
   });
   assert.equal(result.code, 3);
   assert.match(result.stderr, /applied retention policy differs from consent/);
@@ -405,7 +789,7 @@ test('accepts opaque safe service releases and rejects unsafe release text', asy
       response.end(JSON.stringify(serverResponse));
     });
     const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-      env: { PROVENEX_API_KEY: TEST_TOKEN },
+      env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
     });
     assert.equal(result.code, expectedCode, result.stderr);
     if (expectedError) assert.match(result.stderr, expectedError);
@@ -458,7 +842,7 @@ test('rejects canonical-report mismatch and invalid Ed25519 signatures', async (
       response.end(JSON.stringify(entry.response));
     });
     const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-      env: { PROVENEX_API_KEY: TEST_TOKEN },
+      env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
     });
     assert.equal(result.code, 3);
     assert.match(result.stderr, entry.message);
@@ -478,7 +862,7 @@ test('escapes server-authored public DTO text in locally rendered HTML', async (
   const htmlOutput = path.join(reports, 'escaped.html');
   const result = await runCli([
     'scan', project, '--api-url', origin, '--yes', '--html', htmlOutput,
-  ], { env: { PROVENEX_API_KEY: TEST_TOKEN } });
+  ], { env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN } });
   assert.equal(result.code, 1, result.stderr);
   const html = await readFile(htmlOutput, 'utf8');
   assert.ok(!html.includes('<script>'));
@@ -497,7 +881,7 @@ test('bounds a successful API response before parsing it', async (t) => {
     response.end('{}');
   });
   const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-    env: { PROVENEX_API_KEY: TEST_TOKEN },
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
   });
   assert.equal(result.code, 3);
   assert.match(result.stderr, /response exceeds 33554432 bytes/);
@@ -527,7 +911,7 @@ test('opt-in AI discovery uploads only exact-cwd sessions with opaque labels', a
   const result = await runCli([
     'scan', project, '--discover-ai-history', '--api-url', origin, '--yes',
   ], {
-    env: { HOME: fakeHome, PROVENEX_API_KEY: TEST_TOKEN },
+    env: { HOME: fakeHome, PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
   });
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /AI history: requested; 1 exact-cwd matches/);
@@ -597,12 +981,59 @@ test('scan rejects runtime and cost artifacts while audit accepts them', async (
   assert.match(accepted.stdout, /platform_logs/);
 });
 
+test('broad source scans never sweep conversations.json as configuration', async (t) => {
+  const conversationMarker = 'conversation-history-must-require-explicit-consent';
+  const { project } = await makeProject(t, {
+    files: {
+      'app.js': 'export const safe = true;\n',
+      'exports/conversations.json': '[{"message":"conversation-history-must-require-explicit-consent"}]\n',
+      'exports/Conversations.JSON': '[{"message":"mixed-case-history"}]\n',
+      'exports/CONVERSATIONS.json': '[{"message":"upper-case-history"}]\n',
+    },
+  });
+  let captured;
+  const origin = await mockServer(t, async (request, response) => {
+    captured = JSON.parse(await readRequest(request));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse()));
+  });
+  const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
+  });
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(captured.source_files.map((file) => file.relative_path), ['app.js']);
+  assert.equal(captured.artifacts.length, 0);
+  assert.ok(!captured.consent.categories.includes('ai_session_history'));
+  assert.ok(!JSON.stringify(captured).includes(conversationMarker));
+  assert.ok(!JSON.stringify(captured).includes('mixed-case-history'));
+  assert.ok(!JSON.stringify(captured).includes('upper-case-history'));
+  assert.match(result.stdout, /conversations\.json is never swept as/);
+  assert.match(result.stdout, /select it explicitly with --session-input/);
+});
+
 test('routes an exact supported web conversations.json export without exposing its basename', async (t) => {
-  const { base, project } = await makeProject(t);
-  const exportDirectory = path.join(base, 'chatgpt-export');
+  const { project } = await makeProject(t);
+  const exportDirectory = path.join(project, 'chatgpt-export');
   await mkdir(exportDirectory);
   const conversationExport = path.join(exportDirectory, 'conversations.json');
   await writeFile(conversationExport, '[{"id":"conversation","mapping":{}}]\n');
+  const mislabeled = await runCli([
+    'scan', project, '--dependency-audit', conversationExport, '--dry-run',
+  ]);
+  assert.equal(mislabeled.code, 3);
+  assert.match(mislabeled.stderr, /web conversation exports require explicit --session-input consent/);
+  assert.ok(!`${mislabeled.stdout}${mislabeled.stderr}`.includes(conversationExport));
+
+  const mixedCaseExport = path.join(exportDirectory, 'Conversations.JSON');
+  await writeFile(mixedCaseExport, '[{"id":"mixed-case-conversation","mapping":{}}]\n');
+  const mixedCaseMislabeled = await runCli([
+    'scan', project, '--dependency-audit', mixedCaseExport, '--dry-run',
+  ]);
+  assert.equal(mixedCaseMislabeled.code, 3);
+  assert.match(mixedCaseMislabeled.stderr, /web conversation exports require explicit --session-input consent/);
+  assert.ok(!`${mixedCaseMislabeled.stdout}${mixedCaseMislabeled.stderr}`.includes(mixedCaseExport));
+
   let captured;
   const origin = await mockServer(t, async (request, response) => {
     captured = JSON.parse(await readRequest(request));
@@ -611,13 +1042,14 @@ test('routes an exact supported web conversations.json export without exposing i
   });
   const result = await runCli([
     'scan', project, '--session-input', conversationExport, '--api-url', origin, '--yes',
-  ], { env: { PROVENEX_API_KEY: TEST_TOKEN } });
+  ], { env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN } });
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(captured.artifacts.map(({ kind, name }) => ({ kind, name })), [{
     kind: 'conversation_export',
     name: 'conversation-export-001.json',
   }]);
   assert.ok(!captured.artifacts[0].name.includes('conversations'));
+  assert.ok(!captured.source_files.some((file) => file.relative_path.endsWith('conversations.json')));
   assert.match(captured.artifacts[0].content, /conversation/);
   assert.match(result.stdout, /conversation_export/);
 });
@@ -651,7 +1083,7 @@ test('repeatable local excludes prune before reading and never enter the request
     '--exclude', '*.txt',
     '--api-url', origin,
     '--yes',
-  ], { env: { PROVENEX_API_KEY: TEST_TOKEN } });
+  ], { env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN } });
 
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(captured.source_files.map((file) => file.relative_path), ['app.js']);
@@ -684,6 +1116,7 @@ test('collects representative credential, native/mobile, and text configuration 
     '.terraformrc': 'credentials {}\n',
     '.yarnrc': 'registry "https://example.invalid"\n',
     'data.csv': 'email\ncustomer@example.invalid\n',
+    'settings.json': '{"feature":true}\n',
     'index.html': '<main>hello</main>\n',
     'notes.txt': 'deployment note\n',
     'Config.xcconfig': 'API_URL = https://example.invalid\n',
@@ -698,7 +1131,7 @@ test('collects representative credential, native/mobile, and text configuration 
     response.end(JSON.stringify(validResponse()));
   });
   const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-    env: { PROVENEX_API_KEY: TEST_TOKEN },
+    env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
   });
   assert.equal(result.code, 0, result.stderr);
   const selected = new Set(captured.source_files.map((file) => file.relative_path));
@@ -706,6 +1139,8 @@ test('collects representative credential, native/mobile, and text configuration 
     assert.ok(selected.has(filename), `expected ${filename} to be collected`);
   }
   assert.ok(captured.consent.categories.includes('environment_secrets'));
+  assert.ok(captured.consent.categories.includes('configuration'));
+  assert.match(result.stdout, /High-sensitivity categories: .*configuration/);
   assert.match(result.stdout, /High-sensitivity source paths selected/);
   assert.match(result.stdout, /\.npmrc/);
   assert.match(result.stdout, /\.envrc/);
@@ -738,6 +1173,43 @@ test('hosted request limits and path grammar stay aligned with the public schema
   );
   assert.equal(schema['x-maxAggregateContentBytes'], SERVER_LIMITS.maxAggregateContentBytes);
   assert.equal(SERVER_LIMITS.maxRequestBytes, 128 * 1024 * 1024);
+  assert.deepEqual(
+    schema.allOf[0].if,
+    {
+      properties: { command: { const: 'scan' } },
+      required: ['command'],
+    },
+  );
+  assert.deepEqual(
+    schema.allOf[0].then.properties.artifacts.items.properties.kind.enum,
+    ['session', 'conversation_export', 'dependency_audit'],
+  );
+  assert.deepEqual(
+    schema.properties.artifacts.items.properties.kind.enum,
+    ['session', 'conversation_export', 'fly_log', 'cloudwatch_log', 'aws_cost', 'dependency_audit'],
+  );
+  const artifactNamePatterns = Object.fromEntries(
+    schema.properties.artifacts.items.allOf.map((rule) => [
+      rule.if.properties.kind.const,
+      rule.then.properties.name.pattern,
+    ]),
+  );
+  const artifactNameExamples = {
+    session: 'session-001.jsonl',
+    conversation_export: 'conversation-export-001.json',
+    fly_log: 'fly-log-001.jsonl',
+    cloudwatch_log: 'cloudwatch-log-001.json',
+    aws_cost: 'aws-cost-001.json',
+    dependency_audit: 'dependency-audit-001.json',
+  };
+  assert.deepEqual(Object.keys(artifactNamePatterns).sort(), Object.keys(artifactNameExamples).sort());
+  for (const [kind, validName] of Object.entries(artifactNameExamples)) {
+    const pattern = new RegExp(artifactNamePatterns[kind], 'u');
+    assert.equal(pattern.test(validName), true, `${kind} must accept ${validName}`);
+    for (const [otherKind, otherName] of Object.entries(artifactNameExamples)) {
+      if (otherKind !== kind) assert.equal(pattern.test(otherName), false, `${kind} must reject ${otherName}`);
+    }
+  }
   assert.deepEqual(DISCOVERY_LIMITS, {
     maxCandidateFiles: 20_000,
     maxDirectoryEntries: 100_000,
@@ -755,6 +1227,31 @@ test('hosted request limits and path grammar stay aligned with the public schema
   assert.equal(pathPattern.test('src/bad:name.js'), false);
   assert.equal(pathPattern.test('src\\bad.js'), false);
   assert.equal(pathPattern.test('.git/config'), false);
+
+  const targetPattern = new RegExp(schema.properties.target.pattern, 'u');
+  assert.equal(targetPattern.test('solo  founder\u00a0project'), true);
+  assert.equal(targetPattern.test(' leading-space'), false);
+  assert.equal(targetPattern.test('trailing-space '), false);
+  for (const unsafe of ['project\u0085name', 'project\u200dname', 'project\u2028name', 'project\u2029name']) {
+    assert.equal(targetPattern.test(unsafe), false, `target pattern must reject ${JSON.stringify(unsafe)}`);
+  }
+});
+
+test('OpenAPI documents the complete hosted error surface', async () => {
+  const openapi = await readFile(
+    path.join(PACKAGE_ROOT, 'openapi', 'provenex-check.v1.yaml'),
+    'utf8',
+  );
+  for (const status of ['400', '401', '402', '403', '413', '415', '422', '429', '500']) {
+    assert.match(openapi, new RegExp(`^        '${status}':`, 'm'));
+  }
+  assert.match(openapi, /runtime logs and cost evidence require\n          audit/);
+});
+
+test('npm manifest is intentionally private and has no publication configuration', async () => {
+  const manifest = JSON.parse(await readFile(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
+  assert.equal(manifest.private, true);
+  assert.equal(Object.hasOwn(manifest, 'publishConfig'), false);
 });
 
 test('public response schema exposes only the strict DTO and ephemeral envelope', async () => {

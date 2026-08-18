@@ -1,6 +1,7 @@
 {
   "name": "provenex-check",
   "version": "0.1.0-alpha.2",
+  "private": true,
   "description": "Consent-first Provenex telemetry and source collector CLI",
   "type": "module",
   "bin": {
@@ -24,9 +25,6 @@
     "node": ">=22"
   },
   "license": "Apache-2.0",
-  "publishConfig": {
-    "access": "public"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/provenex/provenex-public.git",
