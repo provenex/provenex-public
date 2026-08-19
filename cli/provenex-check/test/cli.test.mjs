@@ -1308,10 +1308,12 @@ test('OpenAPI documents the complete hosted error surface', async () => {
   assert.match(readme, /--exclude '\*\.env'/);
 });
 
-test('npm manifest is intentionally private and has no publication configuration', async () => {
+test('npm manifest is the scoped public @provenex/check package', async () => {
   const manifest = JSON.parse(await readFile(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
-  assert.equal(manifest.private, true);
-  assert.equal(Object.hasOwn(manifest, 'publishConfig'), false);
+  assert.equal(manifest.name, '@provenex/check');
+  assert.notEqual(manifest.private, true);
+  assert.equal(manifest.publishConfig?.access, 'public');
+  assert.equal(manifest.bin['provenex-check'], 'bin/provenex-check.js');
 });
 
 test('public response schema exposes only the strict DTO and ephemeral envelope', async () => {
