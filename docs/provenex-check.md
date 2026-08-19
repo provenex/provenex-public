@@ -91,11 +91,11 @@ estimated work before requesting permission.
 
 This table is the intended product boundary, not a claim that billing,
 self-serve signup, recurring connectors, or plan entitlements ship in the
-current alpha. The alpha uses manually issued API keys and implements the
-bounded `scan` and explicit-export `audit` path only. Its npm manifest is
-private and intentionally unpublished. The unscoped `provenex-check` name is
-not reserved by this repository, so alpha users must run a verified source
-checkout rather than installing or executing that name from npm.
+current alpha. The alpha issues bounded trial API keys and implements the
+bounded `scan` and explicit-export `audit` path only. It ships as the scoped
+`@provenex/check` package on npm (`npx @provenex/check` or a global install);
+a verified source checkout of this repository remains a supported developer
+path.
 
 | Tier | Product boundary |
 |---|---|

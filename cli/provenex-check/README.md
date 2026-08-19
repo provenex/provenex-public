@@ -17,23 +17,23 @@ locally. Server-rendered views and private engine fields are rejected.
 - Node.js 22 or newer
 - A Provenex API key for uploads (`--dry-run` needs no key)
 
-The alpha npm manifest is private and intentionally unpublished. The unscoped
-`provenex-check` npm name is not reserved by this repository: do not install or
-execute a package with that name from npm or `npx`. Use a verified checkout of
-this repository instead.
-
-From this directory, test the checkout and optionally create a local link:
+Install the scoped package from npm, or run it without installing:
 
 ```sh
-npm test
-npm link
+npm install -g @provenex/check
 provenex-check --version
 ```
 
-The examples below use the command created by that source-checkout link. You
-can avoid linking and invoke `node ./bin/provenex-check.js` directly. With no
+`npx @provenex/check <args>` runs the same CLI without a global install. With no
 subcommand the CLI defaults to `scan .`; starting with an option such as
 `--dry-run` does the same.
+
+Uploads need a Provenex trial API key (`--dry-run` needs none). Request a trial
+key at [provenex.ai](https://provenex.ai) — it is a bounded trial tenant — and
+set it as `PROVENEX_API_KEY` before a real scan.
+
+Developers can instead run from a verified source checkout of this repository
+(`npm test && npm link`, or `node ./bin/provenex-check.js` directly).
 
 ## First run
 
