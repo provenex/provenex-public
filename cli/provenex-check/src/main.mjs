@@ -23,7 +23,7 @@ import { UsageError } from './errors.mjs';
 import { SERVER_LIMITS } from './limits.mjs';
 import { CHECK_DATA_POLICY } from './policy.mjs';
 import { renderHtml, renderTerminal } from './render.mjs';
-import { renderCapabilities, renderPlan } from './plan.mjs';
+import { renderCapabilities, renderDemo, renderPlan } from './plan.mjs';
 import { applyTelemetryFormats, offerEvidence, shouldOfferEvidence } from './prompt.mjs';
 import {
   assertPriorResponseOutsideRoot,
@@ -156,6 +156,10 @@ export async function main(argv) {
   }
   if (options.version) {
     stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+  if (options.command === 'demo') {
+    stdout.write(renderDemo());
     return 0;
   }
   if (options.command === 'capabilities') {

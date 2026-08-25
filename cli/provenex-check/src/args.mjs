@@ -35,11 +35,13 @@ const VALUE_FLAGS = new Set([
 
 export function usage() {
   return `Usage:
+  provenex-check demo
   provenex-check plan [path]
   provenex-check capabilities
   provenex-check scan [path] [options]
   provenex-check audit [path] [options]
 
+demo renders one built-in Brightcart result without reading files or calling a service.
 plan inventories local evidence surfaces without uploading.
 capabilities lists what each consented surface unlocks.
 scan and audit collect a bounded, consented dataset and send it to the hosted
@@ -132,11 +134,11 @@ export function parseArgs(argv, env = process.env) {
 
   let command = argv.length === 0 ? 'plan' : 'scan';
   let argumentStart = 0;
-  if (argv[0] === 'scan' || argv[0] === 'audit' || argv[0] === 'plan' || argv[0] === 'capabilities') {
+  if (argv[0] === 'scan' || argv[0] === 'audit' || argv[0] === 'demo' || argv[0] === 'plan' || argv[0] === 'capabilities') {
     command = argv[0];
     argumentStart = 1;
   } else if (argv.length > 0 && !argv[0].startsWith('--')) {
-    throw new UsageError(`expected "plan", "capabilities", "scan", or "audit"; run with --help for usage`);
+    throw new UsageError(`expected "demo", "plan", "capabilities", "scan", or "audit"; run with --help for usage`);
   }
 
   const options = {
@@ -228,8 +230,8 @@ export function parseArgs(argv, env = process.env) {
   }
 
   if (positionals.length > 1) throw new UsageError('only one scan path may be supplied');
-  if (command === 'capabilities') {
-    if (positionals.length > 0) throw new UsageError('capabilities does not take a path');
+  if (command === 'capabilities' || command === 'demo') {
+    if (positionals.length > 0) throw new UsageError(`${command} does not take a path`);
   } else if (positionals.length === 1) {
     options.targetPath = positionals[0];
   }
@@ -238,7 +240,7 @@ export function parseArgs(argv, env = process.env) {
     if (artifact.kind === 'telemetry') artifact.format = options.telemetryFormat;
   }
 
-  if (command === 'plan' || command === 'capabilities') {
+  if (command === 'demo' || command === 'plan' || command === 'capabilities') {
     if (
       options.artifacts.length > 0
       || options.excludes.length > 0
