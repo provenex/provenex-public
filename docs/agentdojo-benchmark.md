@@ -33,10 +33,9 @@ repository alone. Describe it as a frozen, company-reported result rather than
 an independently verified score.
 
 The input omitted AgentDojo security labels and used globally unique replay
-identities. Provenex content-derived enrichment was enabled (signature scan,
-content-hash document identity, and payload-token lineage). No content
-ablation was run, so this result is **label-blind, not content-blind**, and must
-not be described as “chain structure alone.”
+identities. Content-derived evidence was enabled and no content ablation was
+run, so this result is **label-blind, not content-blind**, and must not be
+described as “chain structure alone.”
 
 ## Scope funnel
 
@@ -90,10 +89,10 @@ The no-injection controls also expose a serious starter-policy tuning issue:
 (47.8%). We call this the **starter/default-config control alert rate**, not a
 false-positive rate. AgentDojo does not provide the customer authorization and
 policy context needed to decide whether every composition is actually allowed.
-The frozen run used the checked-in starter trust/policy files plus the
-zero-config discovery overlay, without customer-specific policy. A rate this
-high still predicts substantial review burden and requires adjudication and
-policy tuning before making specificity claims.
+The frozen run used the checked-in starter configuration without
+customer-specific policy. A rate this high still predicts substantial review
+burden and requires adjudication and policy tuning before making specificity
+claims.
 
 ## Interpretation limits
 

@@ -38,12 +38,13 @@ config_doc(origin=load-test-scope)
 
 > **No production change may descend from a non-production-scoped source.**
 
-The closure spans an `untrusted-external`-classified source (`configrepo://acme/payments-api/loadtest/rate_limits.yaml`, where "untrusted" here means "not verified for production use") and a `privileged-action` destination (`terraform_apply_prod`). The disqualifying property `provenex.source.scope = load-test` rides on the source-introducing span and is what marks the source as **never verified for THIS action**.
+The unsafe trace supplies `provenex.source.scope = load-test` on the source
+artifact and records the downstream `terraform_apply_prod` action. The matched
+twin changes the source scope to `production` while retaining the same action
+shape.
 
-**Recorded offline result: Red**, with binding
-`untrusted-influence-on-privileged-action`. A reviewed deployment could map
-that result to denial or approval routing; this fixture does not test either
-enforcement path.
+**Recorded offline result: Red** on the production change under the declared
+invariant. This fixture does not test denial or approval routing.
 
 ## The one-to-one contrast
 

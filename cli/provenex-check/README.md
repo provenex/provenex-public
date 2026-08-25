@@ -25,36 +25,63 @@ provenex-check --version
 ```
 
 `npx @provenex/check <args>` runs the same CLI without a global install. With no
-subcommand the CLI defaults to `scan .`; starting with an option such as
-`--dry-run` does the same.
+arguments it inventories the current project locally. Starting with a scan
+option such as `--dry-run` defaults to `scan .`.
 
 Uploads need a Provenex trial API key (`--dry-run` needs none). Request a trial
 key at [provenex.ai](https://provenex.ai) — it is a bounded trial tenant — and
 set it as `PROVENEX_API_KEY` before a real scan.
+
+A worked source-only example on four public GitHub repositories (what `plan`
+showed, what the scan flagged, and how to read each finding) is in
+[`docs/check-cli-oss-case-study.md`](../../docs/check-cli-oss-case-study.md).
+The smallest tree to try first is
+[`modelcontextprotocol/servers`](https://github.com/modelcontextprotocol/servers).
 
 Developers can instead run from a verified source checkout of this repository
 (`npm test && npm link`, or `node ./bin/provenex-check.js` directly).
 
 ## First run
 
-Inspect what would leave the laptop. This reads no API key and sends nothing:
+Inspect what is on disk without uploading, then inspect what would leave the
+laptop. Neither command reads an API key or sends anything:
 
 ```sh
+provenex-check plan /path/to/project
+provenex-check capabilities
 provenex-check scan /path/to/project --dry-run
 ```
 
-Add `--discover-ai-history` to opt in to bounded discovery under the well-known
-Claude Code and Codex session directories. Discovery parses only the first
-complete JSONL metadata record, bounded to 64 KiB per candidate, and selects a
-session only when that record's provider-specific `cwd` exactly matches the
-canonical scan root. Malformed, missing, and over-limit first records are
-skipped. Only bytes through the first record count toward the 32 MiB aggregate
-metadata budget. Discovery then lists the selected count and bytes in the
-preflight. It never reads browser history, cookies, or authentication stores,
-and never runs unless the flag is present. Discovery fails closed rather than
-returning partial selection if the combined Claude/Codex traversal would
-exceed 10,000 directories, 100,000 directory entries, 20,000 candidate session
-files, or 32 MiB of first-record metadata.
+Add `--list-files` to the dry run when you want every selected
+source-relative path instead of the compact default preflight.
+
+On an interactive TTY, `scan` and `audit` first run bounded, metadata-only
+discovery under the well-known Claude Code and Codex session directories. The
+CLI reports `found`, `none`, or `unavailable`. When it finds exact-project
+matches, it asks once—with a default of yes—whether to include the full session
+files for an unjoined review alongside the project scan. This version does not
+yet connect a session action to a source path. Declining leaves every session
+out. The broader trace/export/audit-file catalog stays collapsed behind a
+separate, default-no “Add another evidence file?” question. Paths entered at
+that prompt are read inside the CLI; the CLI does not write them to shell
+history.
+
+Metadata discovery parses only the first complete JSONL record, bounded to 64
+KiB per candidate, and matches only when that record's provider-specific `cwd`
+equals the canonical scan root exactly. Malformed, missing, and over-limit
+first records are skipped. Only bytes through the first record count toward the
+32 MiB aggregate metadata budget. The preflight lists the included session
+count and bytes, never their filenames. Discovery never reads browser history,
+cookies, or authentication stores. Discovery fails closed rather than returning
+a partial selection if the combined Claude/Codex traversal would exceed 10,000
+directories, 100,000 directory entries, 20,000 candidate session files, or 32
+MiB of first-record metadata.
+
+Non-interactive runs, `--yes`, and `--no-prompt` do not perform this guided
+discovery and never include local AI history by themselves. Use
+`--discover-ai-history` as the explicit inclusion flag for automation or when
+skipping prompts. `--yes` approves the displayed upload only; it is not consent
+to search or collect AI history.
 
 Then create an owner-only report directory and run a check:
 
@@ -66,10 +93,15 @@ provenex-check scan /path/to/project \
   --html "$HOME/provenex-reports/check.html"
 ```
 
-The CLI asks for interactive approval. Automation must add `--yes`; otherwise
-a non-interactive upload fails closed. Production API keys are never accepted
-on the command line and are eligible only for the pinned production origin. As
-an alternative to the production environment variable, store this JSON in
+The CLI asks for interactive approval. On a TTY, `scan` and `audit` first
+perform the metadata-only AI-history check described above. The optional file
+offer follows only if requested. The CLI then prints the complete upload
+preflight and calls `POST /v1/check/runs` once. Automation must add `--yes`;
+`--no-prompt` skips only the guided discovery and file offer, so a
+non-interactive upload without `--yes` still fails closed. Production API keys
+are never accepted on the command line and are eligible only for the pinned
+production origin. As an alternative to the production environment variable,
+store this JSON in
 `~/.config/provenex/check.json` and run `chmod 600` on the file:
 
 ```json
@@ -102,17 +134,40 @@ key.
 
 ## Telemetry-assisted checks
 
-`scan` accepts explicitly selected session history and dependency audit output.
-`audit` adds runtime/log/cost evidence. Repeat any artifact option as needed:
+`scan` accepts explicitly selected session history, runtime traces, and
+dependency audit output. `audit` adds runtime/log/cost evidence. Repeat any
+artifact option as needed:
 
 ```sh
+provenex-check scan /path/to/project \
+  --telemetry /path/to/otel-traces.json \
+  --session-input /path/to/session.jsonl \
+  --dependency-audit /path/to/npm-audit.json \
+  --dry-run
+
 provenex-check audit /path/to/project \
   --session-input /path/to/session.jsonl \
+  --telemetry /path/to/otel-traces.json \
   --fly-log /path/to/fly.jsonl \
   --cloudwatch-log /path/to/cloudwatch.json \
   --aws-input /path/to/cost-and-usage.json \
   --dependency-audit /path/to/npm-audit.json
 ```
+
+`--telemetry` defaults to OpenTelemetry JSON (`--telemetry-format otel`). The
+hosted engine reduces consented traces to receipts and scores reachable
+compositions. It also accepts native Langfuse `{trace, observations}` JSON,
+LangSmith REST Run / `/runs/query` arrays, and LangChain OpenLLMetry /
+OpenInference OTLP on that same default. GitHub org or enterprise audit-log
+JSON needs `--telemetry-format github` (or a TTY offer that sniffs the
+shape). That is not GitHub Actions job logs; workflow YAML is already in
+the source scan. ChatGPT Enterprise audit logs use `--telemetry-format
+chatgpt`; chat bodies belong in a `conversations.json` `--session-input`.
+AWS Bedrock model-invocation logs use `--telemetry-format bedrock` (or the
+same sniff) and may be a CloudWatch `FilterLogEvents` JSON export or a JSON
+array of `ModelInvocationLog` records. The public report may include a Next evidence
+section for missing parent links, tool payloads, or identity; it does not
+return private scoring rules or attack-path names.
 
 Artifact contents are uploaded only after they appear in the preflight and the
 user approves. Artifacts receive opaque deterministic labels such as
@@ -123,8 +178,9 @@ command tells the service which analysis depth the user requested.
 For `--session-input`, ordinary Claude Code, Cursor, Codex, or other agent
 session files must use the supported JSONL input form. A file whose exact
 basename is `conversations.json` is treated as a supported ChatGPT or Claude
-web conversation export; the private engine content-discriminates the export
-and it receives the opaque label `conversation-export-001.json`. Other
+web conversation export; the hosted service identifies the supported export
+from its content, and it receives the opaque label
+`conversation-export-001.json`. Other
 arbitrary `.json` files are rejected rather than silently interpreted as
 JSONL. The local basename is used only for this routing decision and is not
 sent to the API. A broad source scan always excludes any case variant of the
@@ -146,8 +202,9 @@ Other artifact flags cannot relabel a web conversation export.
   YAML, TOML, and similar files can contain credentials or customer data. The
   exact high-sensitivity path list remains limited to recognized
   credential-bearing names.
-- Credential-bearing project files such as `.envrc`, `.dev.vars`,
-  `credentials`, `.npmrc`, `.pypirc`, `.netrc`, `.dockercfg`,
+-   Credential-bearing project files such as `.envrc`, `.dev.vars`,
+  `credentials`, AWS `*accessKeys.csv` / `*_credentials.csv` console
+  downloads, `.npmrc`, `.pypirc`, `.netrc`, `.dockercfg`,
   `.dockerconfigjson`, `.terraformrc`, and `.yarnrc` are deliberately selected
   and shown as high-sensitivity paths before consent. The allowlist also covers
   common native/mobile build files and text formats including CSV, HTML, TXT,
@@ -159,14 +216,15 @@ Other artifact flags cannot relabel a web conversation export.
   are the consented routes. Other artifact flags cannot relabel files beneath
   those roots. Local protected paths are never shown or uploaded.
 - Defaults are 5,000 source files, 1 MiB per source file, 16 MiB per telemetry
-  artifact, and 64 MiB total. Requests are capped at 8 consent categories;
+  artifact, and 64 MiB total. Requests are capped at 12 consent categories;
   user overrides are capped at 10,000 files, 4 MiB per source file, 256 artifacts
-  (including at most 32 AWS-cost and 32 dependency-audit artifacts), 64 MiB per
+  (including at most 32 AWS-cost, 32 dependency-audit, and 32 telemetry artifacts), 64 MiB per
   artifact, and 64 MiB total.
   Separately, the serialized JSON request is refused above the service's
   128 MiB body cap.
 - The bounded upload plus receipt of response headers has a 30-minute total
-  deadline, suitable for the 128 MiB request ceiling. A successful streamed
+  deadline, adjustable up to two hours with `--timeout SECONDS` or
+  `PROVENEX_CHECK_TIMEOUT_MS` (milliseconds). The flag takes precedence. A successful streamed
   response is capped at 32 MiB, a 10-minute total body deadline, and a
   60-second idle deadline between chunks.
 - Git state is read with non-shelling, read-only Git commands. The CLI resolves
@@ -218,9 +276,68 @@ chooses to write are local copies outside that application policy.
 The public schemas are in [`schemas/`](schemas/) and the endpoint description
 is in [`openapi/provenex-check.v1.yaml`](openapi/provenex-check.v1.yaml).
 
+Request v1 supports explicit public-report negotiation. Omitting
+`requested_report_schema` preserves the strict `provenex-check-public-report.v1`
+shape for deployed clients. The current CLI requests
+`provenex-check-public-report.v2` and supplies `project_scope`, an opaque
+client-authored HMAC identity matching `pvxproj-` plus 64 lowercase hex
+characters. The service signs and echoes that scope so local comparisons stay
+bound to the same client-defined project. It is not Provenex authority, tenant
+identity, or a durable attestation. V2 `report_mode` is `joined` only when a
+supported telemetry-path or cross-family business join was evaluated;
+otherwise it is `source_preview`. Independent source, session, dependency, or
+runtime clues do not become a joined business-risk claim merely because they
+were uploaded together.
+
+Every v2 finding includes a bounded `owner_view`: a consequence-first headline,
+one business-impact lane, a detector-authored evidence sentence (or an explicit
+unavailable fallback), separate `observed`, `inferred`, and `not_established`
+claims, and remediation with a goal, proposed changes, and acceptance criteria. Fully authored families cover
+the cross-trace composition of untrusted input, private data, and an outbound
+send, plus source-level webhook authenticity. Other detectors use an explicit
+fallback and do not promote their legacy evidence summary into claim-level
+facts.
+
+`owner_view.verification_key` is a stable opaque key only when a detector
+authors a structural identity; otherwise it is `null` and the CLI must not
+claim that absence on a later run verified a fix. `verification_family` is an
+opaque detector-family identity reserved for conservative comparisons. Display
+ids such as `finding-0001` remain ordinal and are never verification identities.
+
+## Re-run verification
+
+After making a change, compare a new `scan` with an owner-only JSON report from
+the same target:
+
+```sh
+provenex-check scan /path/to/project \
+  --verify-against "$HOME/provenex-reports/check.json" \
+  --json "$HOME/provenex-reports/check-next.json" \
+  --html "$HOME/provenex-reports/check-next.html"
+```
+
+The prior report must be a regular, owner-owned file with no group or other
+permissions (`chmod 600`); symlinks are rejected. The CLI validates its strict
+DTO, target, canonical bytes, and self-consistency signature before uploading
+the new run. Neither the prior response nor its local path enters the hosted
+request or the newly signed JSON report. The comparison exists only in local
+terminal and HTML views.
+
+Comparison outcomes are deliberately limited to `still-present` and
+`not-verifiable`. V2 derives an opaque `project_scope` by applying HMAC-SHA-256
+with the active Check credential to the canonical local project root; neither
+the root nor the credential enters the report. The hosted response signs and
+echoes that opaque scope so two same-named projects cannot be compared as one.
+Moving the project or rotating its Check credential deliberately breaks the
+binding. A prior key that is missing from the new report remains
+`not-verifiable` because the current contract does not yet prove that the exact
+candidate and evidence scope were evaluated again. Provenex Check never calls
+absence “fixed.”
+
 The JSON output is the complete validated public response, including an opaque
 safe `service_release`, the exact applied policy, and the signed public report.
-HTML is generated locally from that same report. The response-provided
+HTML is generated locally from that same report. CLI report outputs and their
+temporary files are created owner-only. The response-provided
 ephemeral public key verifies envelope self-consistency only: it does not
 establish Provenex issuer identity, server authenticity, or durable
 attestation. HTTPS and API authentication remain the transport and account

@@ -17,7 +17,7 @@
     "7. Camo proxies to the attacker's endpoint (encoded as the upstream URL); the attacker reconstructs the secret by ordering the requests and decoding the path bytes.",
     "8. The Camo whitelist + GitHub's CSP let every byte through because the destination IS GitHub's trusted image proxy."
   ],
-  "_lineage_notes": "Closure walks from each Camo image fetch back through chat -> private-repo read -> public-PR-comment source. Public-repo PR comments are untrusted-external (per discovery.rs:2000 repo:// pattern). Private-repo reads carry privileged-pii (could go further to privileged-secrets given .env content). Multiple Camo fetches each constitute external-egress; cross-zone-composition fires per fetch. Expected verdict count: 2-3 Red.",
+  "_lineage_notes": "Observable sequence: a public pull-request comment influences reads from a private repository followed by multiple external image requests. Expected public result: multiple Red findings on those requests.",
   "resourceSpans": [
     {
       "resource": {

