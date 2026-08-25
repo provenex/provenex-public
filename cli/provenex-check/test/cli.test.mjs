@@ -259,6 +259,25 @@ test('no arguments gives a local plan instead of entering the upload path', asyn
   assert.doesNotMatch(result.stdout, /Upload this bounded dataset|API key not found/);
 });
 
+test('demo gives the public aha without reading a project, key, or network endpoint', async () => {
+  assert.equal(parseArgs(['demo'], {}).command, 'demo');
+  assert.throws(() => parseArgs(['demo', '.'], {}), /demo does not take a path/);
+  assert.throws(() => parseArgs(['demo', '--dry-run'], {}), /demo does not upload evidence/);
+  const result = await runCli(['demo'], {
+    env: {
+      PROVENEX_API_KEY: 'must-not-be-read',
+      PROVENEX_CHECK_API_URL: 'https://must-not-be-contacted.invalid',
+    },
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Provenex Check demo - Brightcart/);
+  assert.match(result.stdout, /41 orders were refunded twice/);
+  assert.match(result.stdout, /one idempotency key per refund request/);
+  assert.match(result.stdout, /No project files read\. No network request\. No API key\./);
+  assert.doesNotMatch(result.stdout, /must-not-be-read|must-not-be-contacted/);
+  assert.equal(result.stderr, '');
+});
+
 test('posts the public request shape, writes explicit outputs, and preserves server exit', async (t) => {
   const { base, project, reports, config, projectScope } = await makeProject(t);
   await writeFile(path.join(project, '.gitignore'), '.env\n');

@@ -9,7 +9,7 @@ The website at [provenex.ai/check-app](https://provenex.ai/check-app) is a
 static Brightcart example. It does not accept browser files and is not an
 alternative upload client.
 
-## 1. Check the local plan
+## 1. See the result, then check the local plan
 
 Requirements:
 
@@ -20,15 +20,17 @@ Requirements:
 Run without installing a package globally:
 
 ```sh
+npx @provenex/check demo
 npx @provenex/check plan /path/to/project
 npx @provenex/check capabilities
 npx @provenex/check scan /path/to/project --dry-run
 ```
 
-These commands do not need a production API key. `plan` inventories recognized
-project and evidence surfaces. `capabilities` explains which inputs make each
-public result surface evaluable. `--dry-run` reads the eligible selection and
-prints the full upload preflight without making a request.
+These commands do not need a production API key. `demo` renders the fixed
+Brightcart result without reading project files or making a request. `plan`
+inventories recognized project and evidence surfaces. `capabilities` explains
+which inputs make each public result surface evaluable. `--dry-run` reads the
+eligible selection and prints the full upload preflight without making a request.
 
 Use `--list-files` when you want the dry run to list every selected
 project-relative source path:

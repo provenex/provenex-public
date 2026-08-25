@@ -38,6 +38,29 @@ const LANGUAGE_BY_EXT = {
 const MAX_ENTRIES = 20_000;
 const MAX_DIRECTORIES = 4_000;
 
+export function renderDemo() {
+  return `Provenex Check demo - Brightcart
+Built-in example. No project files read. No network request. No API key.
+
+Finding
+41 orders were refunded twice
+The refund call timed out, the handler retried it, and both requests succeeded.
+
+Evidence
+refund.created occurred twice per charge in 41 pairs. Each pair followed the
+same 30 second timeout and retry. The supplied events contain $1,847 in
+duplicate refund amounts.
+
+Next step
+Add one idempotency key per refund request, then replay the timeout path and
+verify that one charge produces one refund.
+
+Try it on your project
+  provenex-check plan .
+  provenex-check scan . --dry-run
+`;
+}
+
 async function inventory(root) {
   const languages = new Map();
   const hits = {

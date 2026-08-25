@@ -10,6 +10,7 @@ provenex-check --version
 You can also run it without a global install:
 
 ```sh
+npx @provenex/check demo
 npx @provenex/check scan /path/to/project --dry-run
 ```
 

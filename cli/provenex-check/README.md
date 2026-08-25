@@ -43,10 +43,12 @@ Developers can instead run from a verified source checkout of this repository
 
 ## First run
 
-Inspect what is on disk without uploading, then inspect what would leave the
-laptop. Neither command reads an API key or sends anything:
+See one complete public example, inspect what is on disk without uploading,
+then inspect what would leave the laptop. None of these commands reads an API
+key or sends anything:
 
 ```sh
+provenex-check demo
 provenex-check plan /path/to/project
 provenex-check capabilities
 provenex-check scan /path/to/project --dry-run

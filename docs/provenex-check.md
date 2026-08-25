@@ -32,6 +32,12 @@ attached.
 
 ## Commands
 
+### `provenex-check demo`
+
+`demo` renders one fixed public Brightcart result without reading a project,
+loading an API key, or making a network request. It provides the first complete
+result before the user decides whether to inventory or upload their own evidence.
+
 ### `provenex-check plan`
 
 `plan` inventories local evidence surfaces without uploading. It reports

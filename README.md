@@ -10,14 +10,17 @@ Provenex Check requires Node.js 22 or newer. Start locally without an API key or
 upload:
 
 ```sh
+npx @provenex/check demo
 npx @provenex/check plan /path/to/project
 npx @provenex/check capabilities
 npx @provenex/check scan /path/to/project --dry-run
 ```
 
-`plan` inventories eligible evidence on the local machine. `--dry-run` shows
-the exact selection, categories, exclusions, destination, and byte limits
-without loading a production key or sending a request.
+`demo` renders the fixed public Brightcart result without reading project files,
+loading a key, or making a network request. `plan` inventories eligible evidence
+on the local machine. `--dry-run` shows the exact selection, categories,
+exclusions, destination, and byte limits without loading a production key or
+sending a request.
 
 To run the hosted analysis, request a Provenex API key, review the preflight,
 and approve the upload:
