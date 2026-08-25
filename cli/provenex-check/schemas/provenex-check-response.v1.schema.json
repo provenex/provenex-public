@@ -63,7 +63,7 @@
       },
       "$comment": "Evidence-level counts must sum to total and total must equal the emitted findings length."
     },
-    "finding": {
+    "findingV1": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "category", "disposition", "evidence_level", "title", "consequence", "evidence", "next_step"],
@@ -78,6 +78,54 @@
         "next_step": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" }
       }
     },
+    "remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "changes", "acceptance_criteria"],
+      "properties": {
+        "goal": { "type": "string", "minLength": 1, "maxLength": 320, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "changes": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/ownerClaim" } },
+        "acceptance_criteria": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/ownerClaim" } }
+      }
+    },
+    "ownerClaim": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320,
+      "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$"
+    },
+    "ownerView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verification_family", "verification_key", "headline", "impact_lane", "join", "observed", "inferred", "not_established", "remediation"],
+      "properties": {
+        "verification_family": { "type": "string", "pattern": "^pvxvfam-[0-9a-f]{16}$", "description": "Opaque detector-family identity used to prevent ambiguous rerun comparisons; it is not a private rule id." },
+        "verification_key": { "type": ["string", "null"], "pattern": "^pvxvf-[0-9a-f]{32}$", "description": "Stable opaque identity for equivalent findings when the detector authors a stable structural identity; null means absence cannot be verified for this finding." },
+        "headline": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "impact_lane": { "enum": ["money_refunds", "discounts_access", "data_messages", "security_production", "other"] },
+        "join": { "$ref": "#/$defs/ownerClaim" },
+        "observed": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/ownerClaim" } },
+        "inferred": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/ownerClaim" } },
+        "not_established": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/ownerClaim" } },
+        "remediation": { "$ref": "#/$defs/remediation" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "disposition", "evidence_level", "title", "consequence", "evidence", "next_step", "owner_view"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^finding-[0-9]{4}$" },
+        "category": { "$ref": "#/$defs/category" },
+        "disposition": { "enum": ["confirmed", "requires_review", "preventable"] },
+        "evidence_level": { "enum": ["direct", "correlated", "tentative"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "consequence": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "evidence": { "type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$", "description": "Sanitized, bounded legacy evidence summary; owner_view keeps observed, inferred, and not-established claims separate." },
+        "next_step": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "owner_view": { "$ref": "#/$defs/ownerView" }
+      }
+    },
     "coverage": {
       "type": "object",
       "additionalProperties": false,
@@ -89,10 +137,37 @@
         "detail": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" }
       }
     },
-    "report": {
+    "nextEvidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "tool_version", "command", "target", "generated_at", "status", "summary", "conclusion", "findings", "coverage", "limitations"],
+      "required": ["id", "surface", "status", "why", "how"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^evidence-[0-9]{4}$" },
+        "surface": {
+          "enum": [
+            "agent_traces",
+            "ai_sessions",
+            "parent_links",
+            "tool_payloads",
+            "identity",
+            "runtime_logs",
+            "cost_export",
+            "vendor_audit",
+            "classification",
+            "dependency_audit",
+            "agent_config",
+            "payments"
+          ]
+        },
+        "status": { "enum": ["missing", "partial", "present"] },
+        "why": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" },
+        "how": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" }
+      }
+    },
+    "reportV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tool_version", "command", "target", "generated_at", "status", "summary", "conclusion", "findings", "coverage", "next_evidence", "limitations"],
       "properties": {
         "schema_version": { "const": "provenex-check-public-report.v1" },
         "tool_version": { "const": "0.1.0-alpha.2" },
@@ -102,11 +177,41 @@
         "status": { "enum": ["complete", "incomplete"] },
         "summary": { "$ref": "#/$defs/summary" },
         "conclusion": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$", "description": "Sanitized, bounded customer-facing conclusion." },
-        "findings": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/finding" } },
+        "findings": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/findingV1" } },
         "coverage": { "type": "array", "maxItems": 9, "items": { "$ref": "#/$defs/coverage" } },
+        "next_evidence": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/nextEvidence" } },
         "limitations": { "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" } }
       },
       "$comment": "Finding and coverage ids are sequential from 0001; coverage categories are unique. Display strings contain no control, format, or unpaired-surrogate code points."
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tool_version", "report_mode", "project_scope", "command", "target", "generated_at", "status", "summary", "conclusion", "findings", "coverage", "next_evidence", "limitations"],
+      "properties": {
+        "schema_version": { "const": "provenex-check-public-report.v2" },
+        "tool_version": { "const": "0.1.0-alpha.3" },
+        "report_mode": {
+          "enum": ["source_preview", "joined"],
+          "description": "joined means a supported telemetry-path or cross-family business join was evaluated. source_preview means no such join completed, even when an independent artifact adapter also produced clues."
+        },
+        "project_scope": {
+          "type": "string",
+          "pattern": "^pvxproj-[0-9a-f]{64}$",
+          "description": "Signed echo of the client-authored HMAC project identity that binds local comparisons. It provides report self-consistency only and is not Provenex authority, tenant identity, or durable attestation."
+        },
+        "command": { "enum": ["scan", "audit"] },
+        "target": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^(?!\\s)(?!.*\\s$)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$", "x-maxUtf8Bytes": 255 },
+        "generated_at": { "type": "string", "format": "date-time", "maxLength": 35, "pattern": "^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$" },
+        "status": { "enum": ["complete", "incomplete"] },
+        "summary": { "$ref": "#/$defs/summary" },
+        "conclusion": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$", "description": "Sanitized, bounded customer-facing conclusion." },
+        "findings": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/finding" } },
+        "coverage": { "type": "array", "maxItems": 9, "items": { "$ref": "#/$defs/coverage" } },
+        "next_evidence": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/nextEvidence" } },
+        "limitations": { "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]+$" } }
+      },
+      "$comment": "Every v2 report includes the request project_scope and every finding includes an owner_view. A null verification_key is an explicit unsupported-verification state, not a stable identity. Finding and coverage ids remain sequential display ids only."
     },
     "signature": {
       "type": "object",
@@ -128,7 +233,12 @@
       "required": ["schema_version", "report", "canonical_report_json", "signature"],
       "properties": {
         "schema_version": { "const": "provenex-check-signed-report.v1" },
-        "report": { "$ref": "#/$defs/report" },
+        "report": {
+          "oneOf": [
+            { "$ref": "#/$defs/reportV1" },
+            { "$ref": "#/$defs/report" }
+          ]
+        },
         "canonical_report_json": { "type": "string", "maxLength": 16777216, "x-maxUtf8Bytes": 16777216, "description": "Compact JSON with recursively lexicographically sorted object keys; arrays preserve order." },
         "signature": { "$ref": "#/$defs/signature" }
       }

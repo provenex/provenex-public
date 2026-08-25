@@ -43,14 +43,12 @@ Each directory ships four artifacts:
 ## Reproduction boundary
 
 This public repository contains the exact fixture/configuration corpus and
-hashes, but not the Provenex engine source or regression harness. Engine
-operators can reproduce the recorded assertion with
-`cargo test --test honest_mistake_traces` at the frozen source commit. Public
+hashes, but not the Provenex engine source or regression harness. Public
 readers can audit the matched structural differences and verify every file
 hash from `summary.json`; they cannot independently execute Provenex from this
 repository alone.
 
-## Honesty boundary
+## Evidence scope
 
 These demos run on synthetic-but-realistic telemetry that Provenex authors. They are an **existence proof of the Provenex mechanism**, not evidence of real-world frequency or an incumbent miss. Each demo legitimately shows that the chain is reconstructible, the configured Provenex invariant fires on the unsafe trace, and the matched benign twin clears. State that boundary plainly when presenting. **The fixture supports the evaluation; correlated customer evidence supports the comparative claim.**
 

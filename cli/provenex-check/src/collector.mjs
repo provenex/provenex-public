@@ -35,8 +35,8 @@ const SOURCE_EXTENSIONS = new Set([
   '.gradle', '.html', '.json5', '.jsonc', '.jsx', '.kt', '.kts', '.lua', '.m', '.md', '.mdx', '.mjs',
   '.mk', '.mm', '.php', '.pl', '.plist', '.properties', '.proto', '.ps1', '.py', '.rb',
   '.rs', '.scala', '.scss', '.sh', '.sol', '.sql', '.svelte', '.swift', '.tf',
-  '.tfvars', '.toml', '.ts', '.tsx', '.txt', '.vue', '.xml', '.xcconfig', '.yaml', '.yml', '.zig',
-  '.bazel', '.bzl', '.pbxproj', '.zsh',
+  '.tfvars', '.toml', '.ts', '.tsx',   '.txt', '.vue', '.xml', '.xcconfig', '.yaml', '.yml', '.zig',
+  '.bazel', '.bzl', '.pbxproj', '.zsh', '.mdc',
 ]);
 
 const SOURCE_NAMES = new Set([
@@ -51,7 +51,7 @@ const SOURCE_NAMES = new Set([
   'gradle.properties', 'package-lock.json', 'package.json', 'pnpm-lock.yaml',
   'meson.build', 'project.pbxproj', 'pyproject.toml', 'requirements.txt',
   'settings.gradle', 'settings.gradle.kts', 'uv.lock', 'WORKSPACE',
-  'WORKSPACE.bazel', 'yarn.lock',
+  'WORKSPACE.bazel', 'yarn.lock', '.cursorrules',
 ]);
 
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -124,7 +124,11 @@ async function readAtMost(handle, maxBytes) {
   return { buffer: Buffer.concat(chunks, bytes), bytes };
 }
 
-async function readRegularUtf8(filePath, maxBytes, label) {
+function fileIdentity(info) {
+  return `${String(info.dev)}:${String(info.ino)}`;
+}
+
+async function readRegularUtf8(filePath, maxBytes, label, protectedFileIdentities = new Set()) {
   const before = await lstat(filePath);
   if (before.isSymbolicLink()) throw new Error(`${label} must not be a symbolic link`);
   if (!before.isFile()) throw new Error(`${label} must be a regular file`);
@@ -143,6 +147,9 @@ async function readRegularUtf8(filePath, maxBytes, label) {
   try {
     const current = await handle.stat();
     if (!current.isFile()) throw new Error(`${label} must be a regular file`);
+    if (protectedFileIdentities.has(fileIdentity(current))) {
+      throw new Error(`${label} is a protected local-only file and cannot be uploaded`);
+    }
     if (current.size > maxBytes) {
       throw new Error(`${label} is ${current.size} bytes; limit is ${maxBytes}`);
     }
@@ -330,12 +337,38 @@ export async function discoverAiHistory(root) {
   return state.matches;
 }
 
+export async function inspectAiHistory(root) {
+  try {
+    const matches = await discoverAiHistory(root);
+    return {
+      status: matches.length > 0 ? 'found' : 'none',
+      matches,
+    };
+  } catch {
+    return {
+      status: 'unavailable',
+      matches: [],
+    };
+  }
+}
+
 function categoryForSource(relativePath) {
   const name = path.posix.basename(relativePath).toLowerCase();
   if (name === '.env' || name.startsWith('.env.') || name.endsWith('.env')) return 'environment_secrets';
   if (name === '.envrc' || name.startsWith('.envrc.')) return 'environment_secrets';
   if (name === '.dev.vars' || name.startsWith('.dev.vars.')) return 'environment_secrets';
   if (name === 'credentials') return 'environment_secrets';
+  if (
+    name === 'credentials.csv'
+    || name.endsWith('_credentials.csv')
+    || name.endsWith('-credentials.csv')
+    || name === 'accesskeys.csv'
+    || name.endsWith('_accesskeys.csv')
+    || name.endsWith('-accesskeys.csv')
+    || name.endsWith('accesskeys.csv')
+  ) {
+    return 'environment_secrets';
+  }
   if (['.dockercfg', '.dockerconfigjson', '.netrc', '.npmrc', '.pypirc', '.terraformrc', '.yarnrc'].includes(name)) {
     return 'environment_secrets';
   }
@@ -353,6 +386,7 @@ const ARTIFACT_CATEGORIES = {
   cloudwatch_log: 'cloud_logs',
   aws_cost: 'cloud_cost_and_usage',
   dependency_audit: 'dependency_audit',
+  telemetry: 'runtime_telemetry',
 };
 
 export async function resolveScanRoot(targetPath) {
@@ -406,21 +440,28 @@ export async function collectDataset({
   for (const [kind, limit] of [
     ['aws_cost', SERVER_LIMITS.maxAwsCostArtifacts],
     ['dependency_audit', SERVER_LIMITS.maxDependencyAuditArtifacts],
+    ['telemetry', SERVER_LIMITS.maxTelemetryArtifacts],
   ]) {
     const count = artifactInputs.filter((input) => input.kind === kind).length;
     if (count > limit) {
       throw new Error(`${kind} artifact selection contains ${count} files; limit is ${limit}`);
     }
   }
-  const protectedAbsolutePaths = new Set(await Promise.all(protectedFiles.map(async (file) => {
+  const protectedEntries = await Promise.all(protectedFiles.map(async (file) => {
     const resolved = path.resolve(file);
     try {
-      return await realpath(resolved);
+      const canonical = await realpath(resolved);
+      const info = await lstat(canonical);
+      return { canonical, identity: info.isFile() ? fileIdentity(info) : null };
     } catch (error) {
-      if (error?.code === 'ENOENT') return resolved;
-      throw new Error('unable to canonicalize a protected local credential store');
+      if (error?.code === 'ENOENT') return { canonical: resolved, identity: null };
+      throw new Error('unable to canonicalize a protected local-only file');
     }
-  })));
+  }));
+  const protectedAbsolutePaths = new Set(protectedEntries.map((entry) => entry.canonical));
+  const protectedFileIdentities = new Set(
+    protectedEntries.map((entry) => entry.identity).filter(Boolean),
+  );
   const protectedAbsoluteDirectories = new Set(await Promise.all(protectedDirectories.map(async (directory) => {
     const resolved = path.resolve(directory);
     try {
@@ -458,7 +499,12 @@ export async function collectDataset({
 
   for (const absolute of candidateFiles) {
     const relativePath = normalizeRelative(root, absolute);
-    const read = await readRegularUtf8(absolute, limits.maxFileBytes, `source file ${relativePath}`);
+    const read = await readRegularUtf8(
+      absolute,
+      limits.maxFileBytes,
+      `source file ${relativePath}`,
+      protectedFileIdentities,
+    );
     totalBytes += read.bytes;
     if (totalBytes > limits.maxTotalBytes) {
       throw new Error(`selected data exceeds aggregate limit of ${limits.maxTotalBytes} bytes`);
@@ -483,7 +529,7 @@ export async function collectDataset({
       throw error;
     });
     if (protectedAbsolutePaths.has(canonicalAbsolute)) {
-      throw new Error('a protected local credential store cannot be selected as an artifact');
+      throw new Error('a protected local-only file cannot be selected as an artifact');
     }
     if (basename.toLowerCase() === 'conversations.json' && input.kind !== 'session') {
       throw new Error('web conversation exports require explicit --session-input consent');
@@ -504,7 +550,12 @@ export async function collectDataset({
         );
       }
     }
-    const read = await readRegularUtf8(absolute, limits.maxArtifactBytes, `${input.kind} artifact`);
+    const read = await readRegularUtf8(
+      absolute,
+      limits.maxArtifactBytes,
+      `${input.kind} artifact`,
+      protectedFileIdentities,
+    );
     totalBytes += read.bytes;
     if (totalBytes > limits.maxTotalBytes) {
       throw new Error(`selected data exceeds aggregate limit of ${limits.maxTotalBytes} bytes`);
@@ -512,13 +563,20 @@ export async function collectDataset({
     categories.add(ARTIFACT_CATEGORIES[kind]);
     const sequence = (artifactSequence.get(kind) || 0) + 1;
     artifactSequence.set(kind, sequence);
+    if (kind === 'telemetry' && sequence > SERVER_LIMITS.maxTelemetryArtifacts) {
+      throw new Error(`telemetry artifacts exceed the ${SERVER_LIMITS.maxTelemetryArtifacts}-file limit`);
+    }
     const labelPrefix = kind.replaceAll('_', '-');
     const extension = kind === 'session' || kind === 'fly_log' ? 'jsonl' : 'json';
-    artifacts.push({
+    const artifact = {
       kind,
       name: `${labelPrefix}-${String(sequence).padStart(3, '0')}.${extension}`,
       content: read.content,
-    });
+    };
+    if (kind === 'telemetry') {
+      artifact.format = input.format || 'otel';
+    }
+    artifacts.push(artifact);
     if (input.discovered) {
       discoveredSessionCount += 1;
       discoveredSessionBytes += read.bytes;
@@ -558,4 +616,5 @@ export const SENSITIVE_CATEGORIES = new Set([
   'platform_logs',
   'cloud_logs',
   'cloud_cost_and_usage',
+  'runtime_telemetry',
 ]);

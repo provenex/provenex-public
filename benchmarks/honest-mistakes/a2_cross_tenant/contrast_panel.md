@@ -32,11 +32,13 @@ retrieval(tenant=B)
 
 > **No egress to a tenant may descend from another tenant's data.**
 
-The closure spans an `untrusted-external`-classified source (`cases-kb://shared/tenant-B/case-CB-44291`, where "untrusted" here means "wrong tenant for this session") and an `external-egress` destination (`https://mountain-tools.example/api/cases/incoming`, the tenant-A webhook). The `provenex.source.tenant = B` attribute on the source-introducing span carries the disqualifying property forward.
+The unsafe trace supplies `provenex.source.tenant = B` on the retrieved case
+and `provenex.destination.tenant = A` on the outbound action. The matched twin
+uses tenant A for both values.
 
-**Recorded offline result: Red**, with binding `cross-zone-composition`. This
-fixture does not test whether an inline enforcement point would deny the
-action.
+**Recorded offline result: Red** on the outbound action under the declared
+invariant. This fixture does not test whether an inline enforcement point would
+deny the action.
 
 ## The one-to-one contrast
 

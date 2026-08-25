@@ -18,7 +18,7 @@
     "6. Bing's web renderer auto-fetches the image URL on response render. The attacker's relay server logs the URL with the encoded conversation history in the query string.",
     "7. The user sees Bing's response containing pasta recipes while the synthetic session-history payload is sent in the image request."
   ],
-  "_lineage_notes": "Same lineage shape as earlier reconstructions: the untrusted webpage retrieval (span 3000) is the PARENT of the invoke_agent span; the privileged-pii read of the user's session history is a child of the agent; the chat links back to all upstream reads; the markdown-image-render span and the auto-fetch egress are children of the chat. The data-flow walk-back from the egress reaches the attacker webpage AND the user's prior conversation context.",
+  "_lineage_notes": "Observable sequence: an adjacent webpage influences access to prior conversation context followed by an automatically fetched image. Expected public result: Red on the outbound image request.",
   "resourceSpans": [
     {
       "resource": {

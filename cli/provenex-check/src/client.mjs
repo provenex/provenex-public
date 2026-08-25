@@ -4,6 +4,7 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { TextDecoder } from 'node:util';
+import { VERSION } from './args.mjs';
 import { UsageError } from './errors.mjs';
 import { validateHostedResponse } from './report.mjs';
 
@@ -222,7 +223,7 @@ export async function submitRun({
         accept: 'application/json',
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
-        'user-agent': 'provenex-check/0.1.0-alpha.2',
+        'user-agent': `provenex-check/${VERSION}`,
       },
       body: serializedRequest,
       redirect: 'error',

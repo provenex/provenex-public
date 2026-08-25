@@ -2,7 +2,12 @@ import path from 'node:path';
 import { UsageError } from './errors.mjs';
 import { EXCLUDE_LIMITS, SERVER_LIMITS } from './limits.mjs';
 
-export const VERSION = '0.1.0-alpha.2';
+export const VERSION = '0.1.0-alpha.3';
+
+export const REQUEST_TIMEOUT = Object.freeze({
+  defaultSeconds: 30 * 60,
+  maxSeconds: 2 * 60 * 60,
+});
 
 const ARTIFACT_FLAGS = new Map([
   ['--session-input', 'session'],
@@ -10,32 +15,47 @@ const ARTIFACT_FLAGS = new Map([
   ['--cloudwatch-log', 'cloudwatch_log'],
   ['--aws-input', 'aws_cost'],
   ['--dependency-audit', 'dependency_audit'],
+  ['--telemetry', 'telemetry'],
 ]);
 
 const VALUE_FLAGS = new Set([
   '--api-url',
   '--json',
   '--html',
+  '--verify-against',
+  '--timeout',
   '--max-files',
   '--max-file-bytes',
   '--max-artifact-bytes',
   '--max-total-bytes',
   '--exclude',
+  '--telemetry-format',
   ...ARTIFACT_FLAGS.keys(),
 ]);
 
 export function usage() {
   return `Usage:
+  provenex-check plan [path]
+  provenex-check capabilities
   provenex-check scan [path] [options]
   provenex-check audit [path] [options]
 
-Commands collect a bounded, consented dataset and send it to the hosted
+plan inventories local evidence surfaces without uploading.
+capabilities lists what each consented surface unlocks.
+scan and audit collect a bounded, consented dataset and send it to the hosted
 Provenex API. No analysis engine is bundled or downloaded.
 
 Options:
   --api-url URL              Loopback development override only; production is
                              pinned to https://api.provenex.ai
   --session-input PATH       Add session JSONL or conversations.json (repeatable)
+  --telemetry PATH           Add runtime traces (OTLP JSON by default; repeatable)
+  --telemetry-format FORMAT  Format for --telemetry (default otel; also langfuse,
+                             langsmith, langchain, chatgpt, okta, bedrock, m365,
+                             anthropic, gws, github, salesforce, slack, mcp,
+                             shopify, data-activity). github is org/enterprise
+                             audit-log JSON, not Actions job logs. Native
+                             Langfuse JSON and LangSmith REST runs ingest as otel.
   --fly-log PATH             Add a Fly log export (repeatable)
   --cloudwatch-log PATH      Add a CloudWatch log export (repeatable)
   --aws-input PATH           Add an AWS cost/usage export (repeatable)
@@ -43,10 +63,19 @@ Options:
   --exclude PATTERN          Exclude a relative path/glob locally (repeatable)
   --discover-ai-history      Find sessions whose first metadata-record cwd
                              exactly matches the scan root (Claude/Codex only)
+  --no-prompt                Skip guided AI metadata discovery and the optional
+                             file offer (implied by --yes)
   --json PATH                Write the full validated public API response
   --html PATH                Write a locally rendered HTML report
+  --verify-against PATH      Compare this scan with a prior signed Check JSON
+                             locally; never sends the prior report or its path
+  --list-files               List every selected source-relative path locally
+  --timeout SECONDS          Upload and response-header deadline (default ${REQUEST_TIMEOUT.defaultSeconds},
+                             max ${REQUEST_TIMEOUT.maxSeconds}); also
+                             PROVENEX_CHECK_TIMEOUT_MS in milliseconds
   --dry-run                  Print the exact preflight; upload nothing
   --yes                      Approve the displayed upload non-interactively
+                             without discovering or including AI history
   --force                    Replace existing regular report files
   --max-files N              Source-file limit (default 5000, max 10000)
   --max-file-bytes N         Per-file limit (default 1048576, max 4194304)
@@ -68,6 +97,15 @@ uploaded; use the explicit AI-history options to consent to session evidence.
 Scanning the canonical home directory is refused; select a project subtree.`;
 }
 
+const TELEMETRY_FORMATS = new Set([
+  'otel', 'otlp', 'otel-genai', 'langfuse', 'langsmith', 'langchain',
+  'chatgpt', 'openai', 'okta', 'bedrock', 'aws',
+  'm365', 'copilot', 'm365-copilot', 'anthropic', 'anthropic-compliance',
+  'gws', 'google', 'google-workspace', 'github', 'salesforce', 'sfdc', 'mcp',
+  'shopify', 'data-activity', 'data_activity', 'slack', 'slack-audit',
+  'slack-enterprise',
+]);
+
 function takeValue(argv, index, inlineValue, flag) {
   if (inlineValue !== undefined) {
     if (inlineValue.length === 0) throw new UsageError(`${flag} requires a value`);
@@ -88,30 +126,36 @@ function positiveInteger(value, flag) {
   return parsed;
 }
 
-export function parseArgs(argv) {
+export function parseArgs(argv, env = process.env) {
   if (argv.length === 1 && (argv[0] === '--help' || argv[0] === '-h')) return { help: true };
   if (argv.length === 1 && argv[0] === '--version') return { version: true };
 
-  let command = 'scan';
+  let command = argv.length === 0 ? 'plan' : 'scan';
   let argumentStart = 0;
-  if (argv[0] === 'scan' || argv[0] === 'audit') {
+  if (argv[0] === 'scan' || argv[0] === 'audit' || argv[0] === 'plan' || argv[0] === 'capabilities') {
     command = argv[0];
     argumentStart = 1;
   } else if (argv.length > 0 && !argv[0].startsWith('--')) {
-    throw new UsageError(`expected "scan" or "audit"; run with --help for usage`);
+    throw new UsageError(`expected "plan", "capabilities", "scan", or "audit"; run with --help for usage`);
   }
 
   const options = {
     command,
     targetPath: '.',
-    apiUrl: process.env.PROVENEX_CHECK_API_URL || 'https://api.provenex.ai',
+    apiUrl: env.PROVENEX_CHECK_API_URL || 'https://api.provenex.ai',
     artifacts: [],
     excludes: [],
     outputs: {},
+    verifyAgainst: null,
+    listFiles: false,
+    requestTimeoutMs: null,
     dryRun: false,
     discoverAiHistory: false,
     yes: false,
+    noPrompt: false,
     force: false,
+    telemetryFormat: 'otel',
+    telemetryFormatExplicit: false,
     limits: {
       maxFiles: 5000,
       maxFileBytes: 1_048_576,
@@ -133,12 +177,14 @@ export function parseArgs(argv) {
 
     if (flag === '--help') return { help: true };
     if (flag === '--version') return { version: true };
-    if (flag === '--dry-run' || flag === '--yes' || flag === '--force' || flag === '--discover-ai-history') {
+    if (flag === '--dry-run' || flag === '--yes' || flag === '--force' || flag === '--discover-ai-history' || flag === '--no-prompt' || flag === '--list-files') {
       if (inlineValue !== undefined) throw new UsageError(`${flag} does not take a value`);
       if (flag === '--dry-run') options.dryRun = true;
       if (flag === '--yes') options.yes = true;
       if (flag === '--force') options.force = true;
       if (flag === '--discover-ai-history') options.discoverAiHistory = true;
+      if (flag === '--no-prompt') options.noPrompt = true;
+      if (flag === '--list-files') options.listFiles = true;
       continue;
     }
     if (!VALUE_FLAGS.has(flag)) throw new UsageError(`unknown option: ${flag}`);
@@ -155,6 +201,14 @@ export function parseArgs(argv) {
       options.outputs.json = taken.value;
     } else if (flag === '--html') {
       options.outputs.html = taken.value;
+    } else if (flag === '--verify-against') {
+      options.verifyAgainst = path.resolve(taken.value);
+    } else if (flag === '--timeout') {
+      const seconds = positiveInteger(taken.value, flag);
+      if (seconds > REQUEST_TIMEOUT.maxSeconds) {
+        throw new UsageError(`--timeout cannot exceed ${REQUEST_TIMEOUT.maxSeconds} seconds`);
+      }
+      options.requestTimeoutMs = seconds * 1000;
     } else if (flag === '--max-files') {
       options.limits.maxFiles = positiveInteger(taken.value, flag);
     } else if (flag === '--max-file-bytes') {
@@ -163,12 +217,58 @@ export function parseArgs(argv) {
       options.limits.maxArtifactBytes = positiveInteger(taken.value, flag);
     } else if (flag === '--max-total-bytes') {
       options.limits.maxTotalBytes = positiveInteger(taken.value, flag);
+    } else if (flag === '--telemetry-format') {
+      const format = taken.value.trim().toLowerCase();
+      if (!TELEMETRY_FORMATS.has(format)) {
+        throw new UsageError(`unsupported --telemetry-format; run with --help for usage`);
+      }
+      options.telemetryFormat = format;
+      options.telemetryFormatExplicit = true;
     }
   }
 
   if (positionals.length > 1) throw new UsageError('only one scan path may be supplied');
-  if (positionals.length === 1) options.targetPath = positionals[0];
+  if (command === 'capabilities') {
+    if (positionals.length > 0) throw new UsageError('capabilities does not take a path');
+  } else if (positionals.length === 1) {
+    options.targetPath = positionals[0];
+  }
   options.targetPath = path.resolve(options.targetPath);
+  for (const artifact of options.artifacts) {
+    if (artifact.kind === 'telemetry') artifact.format = options.telemetryFormat;
+  }
+
+  if (command === 'plan' || command === 'capabilities') {
+    if (
+      options.artifacts.length > 0
+      || options.excludes.length > 0
+      || options.dryRun
+      || options.yes
+      || options.noPrompt
+      || options.discoverAiHistory
+      || options.outputs.json
+      || options.outputs.html
+      || options.verifyAgainst
+      || options.requestTimeoutMs !== null
+      || options.listFiles
+    ) {
+      throw new UsageError(`${command} does not upload evidence; use scan or audit`);
+    }
+    return options;
+  }
+
+  if (options.requestTimeoutMs === null && env.PROVENEX_CHECK_TIMEOUT_MS) {
+    const milliseconds = positiveInteger(
+      env.PROVENEX_CHECK_TIMEOUT_MS,
+      'PROVENEX_CHECK_TIMEOUT_MS',
+    );
+    if (milliseconds > REQUEST_TIMEOUT.maxSeconds * 1000) {
+      throw new UsageError(
+        `PROVENEX_CHECK_TIMEOUT_MS cannot exceed ${REQUEST_TIMEOUT.maxSeconds * 1000}`,
+      );
+    }
+    options.requestTimeoutMs = milliseconds;
+  }
 
   if (options.limits.maxFiles > SERVER_LIMITS.maxSourceFiles) {
     throw new UsageError(`--max-files cannot exceed ${SERVER_LIMITS.maxSourceFiles}`);
@@ -213,6 +313,12 @@ export function parseArgs(argv) {
     if (runtimeKinds.length > 0) {
       throw new UsageError('Fly, CloudWatch, and AWS cost artifacts require the audit command');
     }
+  }
+  if (command !== 'scan' && options.verifyAgainst) {
+    throw new UsageError('--verify-against is available only with scan');
+  }
+  if (options.dryRun && options.verifyAgainst) {
+    throw new UsageError('--verify-against requires a completed scan and cannot be used with --dry-run');
   }
   return options;
 }

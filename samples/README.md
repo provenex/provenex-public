@@ -5,11 +5,9 @@ public disclosures plus a two-trace synthetic delayed-exfil scenario. These 15
 fixtures are safe to send to staging as a clearly labeled detection appendix.
 They contain no customer telemetry and are not captures from the named vendors.
 
-They do **not** prove live blocking: `/v1/receipts` evaluates a completed
-synthetic trace and persists the result to the selected demo tenant. The
-trusted live-block proof is the controlled customer-local Install Edge mock
-run, where the reverse proxy forwards in observe mode and returns HTTP 403
-without upstream delivery in enforce mode.
+They do not prove live blocking: `/v1/receipts` evaluates a completed synthetic
+trace and persists the result to the selected demo tenant. These fixtures do
+not contain evidence from a component that controlled the modeled action.
 
 ## Run safely
 
@@ -24,9 +22,10 @@ export PROVENEX_DEMO_ALLOW_SYNTHETIC_CENTRAL=1
 ./try-me.sh
 ```
 
-Do not rename these variables to a general customer ingest credential, add a
-file argument, or adapt the script for a customer export. Actual telemetry must
-be imported into the customer-local edge/UI.
+Do not rename these variables to a general customer credential, add a file
+argument, or adapt the script for a customer export. Analyze explicitly
+selected customer evidence through the public Check CLI and its consent
+preflight.
 
 The script accepts `--no-report` to skip local HTML rendering. Each execution
 gets a gitignored `reports/run-<timestamp>-<nonce>/` directory containing the
@@ -38,49 +37,43 @@ runner also fails if the Engine returns the wrong verdict for a scenario's
 exact target receipt; incidental Red findings elsewhere in a trace do not
 satisfy the assertion.
 
-The checked-in fixtures never change at runtime. Temporary copies receive
-per-run trace and data-flow identities plus explicit `_provenex_sample_run`
-harness metadata. Identifier-shaped JSON field names are serialized with an
-equivalent JSON Unicode escape so a raw-string token scanner cannot mistake a
-schema key such as `body_base64` for a customer record id. A JSON parser still
-sees the original field name and scenario. The final audit rejects any target
-closure contaminated by an older run or a different scenario.
+The checked-in fixtures never change at runtime. The runner isolates each
+execution, keeps scenario identities distinct, and rejects a target result
+that belongs to another run or scenario.
 
 ## Bundle
 
 | # | Fixture | Shape | Expected detection |
 |---|---|---|---|
-| 01 | EchoLeak / M365 Copilot | untrusted email → privileged retrieval → URL egress | Red, cross-zone composition |
+| 01 | EchoLeak / M365 Copilot | untrusted email → privileged retrieval → URL egress | Red |
 | 02 | Cursor NomShub | fetched repo rules → credential/device-code egress | multiple Red findings |
-| 03 | CurXecute | Slack MCP input → config write → command execution | Red, high-risk-resource-egress |
+| 03 | CurXecute | Slack MCP input → config write → command execution | Red |
 | 04 | AgentFlayer | poisoned Drive document → secret search → image URL | Red |
 | 05 | ForcedLeak | Web-to-Lead injection → CRM read → partner domain | Red |
 | 06 | ShadowLeak | attacker email → mailbox search → server-side POST | Red |
 | 07 | Notion PDF exfil | injected PDF → workspace read → search-query egress | Red |
 | 08 | CamoLeak | PR comment → private repository → Camo URL | multiple Red findings |
 | 09 | CometJacking | untrusted URL parameter → connector data → POST | Red |
-| 10 | Anthropic MCP-Git RCE | repository content → MCP argument injection → shell | Red, high-risk-resource-egress |
+| 10 | Anthropic MCP-Git RCE | repository content → MCP argument injection → shell | Red |
 | 11 | Delayed exfil, day 0 | poisoned write only | no Red; no egress yet |
 | 12 | Delayed exfil, day 2 | later read/egress joined to day 0 | Red, cross-batch lineage |
 | 13 | Slack AI exfil | poisoned public-channel retrieval → private-channel secret → unsafe response link → victim click | **known miss**: human click is visible but not a governed agent action |
 | 14 | Devin secrets leak | poisoned GitHub issue → runtime secrets → shell/browser egress | multiple Red findings |
-| 15 | Bing/Greshake | poisoned adjacent webpage → session history → image fetch | Red, cross-zone composition |
+| 15 | Bing/Greshake | poisoned adjacent webpage → session history → image fetch | Red |
 
 Traces 11 and 12 run in order with per-run trace, span, and document identities.
-The runner then verifies that the Day 2 target's stored closure contains this
-run's exact Day 0 note receipt and a persistence boundary. Running either trace
-alone is not that proof.
+The runner verifies that the Day 2 target is connected to the same run's Day 0
+write across the modeled persistence boundary. Running either trace alone is
+not that proof.
 
-## Related engine evidence
+## Related evidence
 
-The public runner now includes all 13 unique named shapes that were previously
-split between this pack and an older engine regression suite, including Slack
-AI, Devin's secrets-leak shape, and Bing/Greshake.
+The public runner covers all 13 named disclosure shapes in this pack, including
+Slack AI, Devin's secrets-leak shape, and Bing/Greshake.
 
 Those are disclosure-based telemetry reconstructions, not vendor captures or
 proof that a vendor remains vulnerable. AgentDojo is separate benchmark
-evidence, not an incident, and the engine's 18 latent-path playbooks are
-discovery hypotheses, not 18 additional breach samples.
+evidence, not an incident.
 
 The checked-in event timestamps are synthetic scenario times. Several older
 fixtures encode the disclosed month/day under a different year; do not use
@@ -100,10 +93,9 @@ source notes and the linked primary disclosure are the chronology authority.
 
 It does not establish production prevalence, customer-specific coverage,
 another control's result, an executed exploit, or inline enforcement. A Red
-result here is a retrospective policy finding, not a block receipt. Use
-Discovery against approved customer-local telemetry to establish topology and
-coverage, and use the reverse-proxy controlled mock run for the live-block
-claim.
+result here is retrospective, not a block receipt. Use Provenex Check against
+explicitly approved evidence to evaluate a customer corpus. A live-block claim
+requires a result from the component that controlled the same action.
 
 The final stored-audit check is deliberately limited to a low-volume,
 dedicated demo tenant: the current endpoint returns at most 1,000 rows and has
@@ -117,8 +109,8 @@ this runner as an independent signature-verification proof.
 - HTTP 401: the demo key is unknown or revoked.
 - HTTP 402: the trial expired even if the key remains unrevoked.
 - HTTP 403: the key or tenant is inactive or revoked.
-- Missing/invalid scorer public key: stop; the expected ADR-008-capable staging
-  service is not ready.
+- Missing or invalid scorer public key: stop; the designated staging service is
+  not ready.
 
 Renew or reissue the designated demo tenant before the meeting. Never switch
 to an unrelated customer's key to make the appendix pass.

@@ -32,19 +32,44 @@ attached.
 
 ## Commands
 
+### `provenex-check plan`
+
+`plan` inventories local evidence surfaces without uploading. It reports
+recognized languages, CI workflows, agent/MCP configuration, environment-shaped
+files, host hints, an exact-cwd AI-session count (filenames omitted), and
+obvious trace-export filenames. Use it to decide what to consent to next.
+
+### `provenex-check capabilities`
+
+`capabilities` lists what each consented surface unlocks. Analysis stays on the
+hosted engine; the CLI prints only the supported public evidence and result
+surfaces.
+
 ### `provenex-check scan`
 
 `scan` is the bounded first look. With explicit approval, it inventories the
-repository, selected AI coding histories, and dependency-audit output. It sends
-the approved evidence to the central engine and returns a strict public,
-coverage-aware report in an ephemeral self-consistency envelope. The included
-verification key is not a Provenex issuer identity or durable attestation. Fly,
-CloudWatch, and AWS cost evidence belong to `audit`, so an ordinary `scan`
-cannot imply runtime or spend coverage.
+repository, selected AI coding histories, optional runtime traces, and
+dependency-audit output. It sends the approved evidence to the central engine
+and returns a strict public, coverage-aware report in an ephemeral
+self-consistency envelope. The included verification key is not a Provenex
+issuer identity or durable attestation. Fly, CloudWatch, and AWS cost evidence
+belong to `audit`, so an ordinary `scan` cannot imply deploy-log or spend
+coverage.
+
+When `--telemetry` is supplied, the engine reduces those traces to receipts
+and scores reachable compositions (untrusted input, privileged data, outbound
+sends). The default format is OpenTelemetry JSON and also accepts native
+Langfuse `{trace, observations}` JSON, LangSmith REST Run arrays, and LangChain
+OpenLLMetry / OpenInference OTLP. `--telemetry-format bedrock` accepts
+CloudWatch `FilterLogEvents` model-invocation logs or a JSON array of
+`ModelInvocationLog` records. Gaps become `next_evidence` items that tell the
+CLI what to upload next (parent links, tool payloads, identity). The response
+remains limited to the public report schema.
 
 Static findings remain useful: exposed credentials, dependency advisories,
 unsafe-language surfaces, weak cryptography, missing native/mobile hardening,
-and deployment mistakes can all be evidence. They become distinctively useful
+agent auto-approve / unpinned MCP servers, CI `pull_request_target`, and
+deployment mistakes can all be evidence. They become distinctively useful
 when the engine can relate them to agent access, changed files, deployment and
 runtime observations, customer-data paths, or spend.
 
@@ -52,15 +77,27 @@ If the user supplies only source, the result is explicitly source-bounded. A
 zero-finding source scan never implies that runtime, identity, data, spend, or
 agent behavior was evaluated.
 
-Optional local AI-history discovery examines only the first complete JSONL
-metadata record for each Claude Code or Codex candidate, with a 64 KiB
-per-record bound and 32 MiB aggregate metadata cap. It selects a session only
-when that first record's provider-specific `cwd` exactly matches the canonical
-scan root. Missing, malformed, or oversized first records are skipped, later
-records cannot turn a candidate into a match, and discovered filenames are not
-displayed or uploaded. Explicit and discovered inputs share the 256-artifact
-and 64 MiB aggregate request bounds; exceeding either remains a fail-closed
-error rather than silently omitting sessions.
+On an interactive TTY, local AI-history activation starts with bounded,
+metadata-only discovery. The CLI reports whether exact-project Claude/Codex
+sessions were `found`, whether there were `none`, or whether discovery was
+`unavailable`. For found matches it asks once, with a default of yes, whether
+to include the full session files for an unjoined review alongside the project
+scan. This version does not yet connect a session action to a source path. The
+user can decline, and the generic evidence-file catalog appears only after a
+separate default-no question. Non-interactive runs, `--yes`, and `--no-prompt`
+skip this guided discovery and cannot include AI history without the explicit
+`--discover-ai-history` flag. `--yes` is upload approval, not AI-history
+consent.
+
+The metadata pass examines only the first complete JSONL record for each
+Claude Code or Codex candidate, with a 64 KiB per-record bound and 32 MiB
+aggregate metadata cap. It selects a session only when that first record's
+provider-specific `cwd` exactly matches the canonical scan root. Missing,
+malformed, or oversized first records are skipped, later records cannot turn a
+candidate into a match, and discovered filenames are not displayed or
+uploaded. Explicit and discovered inputs share the 256-artifact and 64 MiB
+aggregate request bounds; exceeding either remains a fail-closed error rather
+than silently omitting sessions.
 
 Any case variant of the `conversations.json` basename is never swept into
 ordinary source or configuration during a broad scan. A supported ChatGPT or
@@ -71,6 +108,27 @@ which point the preflight classifies it as high-sensitivity
 configuration is itself high-sensitivity because
 JSON, YAML, TOML, and similar formats can contain credentials or customer data,
 even when a filename is not on the narrower credential-path list.
+
+The updated CLI explicitly requests `provenex-check-public-report.v2` and
+renders its owner view locally. `report_mode=source_preview` is displayed as an
+evidence preview because it may contain independent source, session, trace, or
+advisory observations; it leads with “no joined business risk was evaluated,”
+shows at most three clues, and asks for one highest-value next input.
+`report_mode=joined` leads with business impact,
+then separates Observed, Inferred, and Not established claims before the
+technical details. The complete validated DTO is saved only when the user
+requests a local `--json` output.
+
+`scan --verify-against PRIOR.json` is the local re-run loop. The prior file
+must be owner-only, regular, signed Check JSON for the same target. It and its
+path never enter the hosted request or current signed report. A stable finding
+can be `still-present` or `not-verifiable`; absence is never “fixed.” The CLI
+derives an opaque HMAC project scope from the active Check credential and the
+canonical local root. The root and credential are never report fields; the
+signed v2 report carries only the opaque scope. A different scope, a null key,
+or a missing prior key is `not-verifiable`. Missing remains unverifiable until
+the signed contract can prove that the exact detector candidate and evidence
+scope were evaluated again.
 
 ### `provenex-check audit`
 
@@ -104,20 +162,12 @@ path.
 | Team | Shared UI, Policy Studio, reusable policy, environments, roles, approvals, evidence retention, and collaboration. |
 | Enterprise | Stronger tenancy and data controls, organization-wide connectors and identity, custom retention/regions, SSO, service guarantees, and optional dedicated/private deployment. |
 
-## Server-side telemetry adaptation
+## Server-side analysis boundary
 
-For paid plans, the hosted engine may use models to propose mappings for
-previously unseen telemetry shapes and to update correlations without requiring
-a new CLI release. Model output is a proposal, not an enforcement decision: it
-must pass bounded schemas and deterministic gates, preserve coverage and
-uncertainty in the report, and require the applicable policy approval before it
-can affect an enforcement point.
-
-Tenant evidence remains tenant-scoped. Reusing any customer-provided telemetry
-to improve common mappings across tenants requires separately documented data
-rights, an explicit opt-in, and controls against reproducing customer content.
-The current alpha does not claim continuous learning or autonomous policy
-changes.
+The hosted service accepts only the formats and request fields exposed by the
+public CLI and schemas. An unknown or failed telemetry shape remains not
+evaluated; it is not converted into a clean result. The current alpha does not
+perform continuous vendor collection or autonomous policy changes.
 
 An AI-agent skill or instruction file is advisory context. It can help an agent
 choose safer actions, but it is not an enforcement boundary. A claim that an
@@ -163,8 +213,11 @@ Before any network request, the CLI must show:
 - the applicable processing, retention, and deletion policy.
 
 The user must explicitly approve that preview. Non-interactive execution must
-use an explicit consent flag. Credentials are never accepted on the command
-line or reproduced in diagnostics.
+use an explicit upload-consent flag. That flag does not authorize AI-history
+discovery or inclusion; automation must separately pass
+`--discover-ai-history` when it intends to include exact-project sessions.
+Credentials are never accepted on the command line or reproduced in
+diagnostics.
 
 Production API access is pinned to `https://api.provenex.ai`. The CLI permits
 an alternate origin only when it is HTTP or HTTPS loopback for local
@@ -201,11 +254,18 @@ changes that exact policy is rejected. The CLI cannot independently prove
 server-side deletion. User-requested local JSON and HTML files are outside the
 application policy.
 
-This Check boundary differs from the customer-local Edge described elsewhere
-in this repository: Check sends the evidence approved in its preflight to the
-central multi-tenant service. Customer-local Edge keeps raw operational
-telemetry in the customer's environment and sends only its documented bounded
-scoring closure. Neither boundary may be described as the other.
+Check sends the evidence approved in its preflight to the central multi-tenant
+service. No public Edge installation is currently available; the
+[installation notice](install.md) defines that distribution boundary.
+
+## Worked public example
+
+A 2026-08-24 source-only run against four public repositories (official MCP
+servers, Astro, Dub, Trigger.dev) is recorded in
+[check-cli-oss-case-study.md](check-cli-oss-case-study.md). It shows `plan`,
+`scan --dry-run`, and how to read `pull_request_target`, tracked `.env` paths,
+password-field hits, and webhook-named files without treating any of them as
+an exploit.
 
 ## Public/private boundary
 

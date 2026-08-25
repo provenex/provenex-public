@@ -3,9 +3,14 @@
 Policy identifier: `provenex-check-ephemeral-v1`
 
 This versioned policy applies to evidence explicitly approved for a single
-public Provenex Check request processed by the shared multi-tenant application.
-The CLI displays this policy before consent and includes its identifier in the
-request. A response is rejected unless it declares this exact policy.
+public Provenex Check CLI request processed by the shared multi-tenant
+application. The CLI displays this policy before consent and includes its
+identifier in the request. A response is rejected unless it declares this exact
+policy.
+
+The website at `https://provenex.ai/check-app` displays a static Brightcart
+example. It does not accept files or submit a Check request, so it is not a
+client of this policy.
 
 ## Application retention and workspace lifecycle
 

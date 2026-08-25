@@ -35,12 +35,14 @@ upstream_import(origin=unverified)
 
 > **No ledger-posting action may descend from an upstream input that lacks a verified-source attestation.**
 
-The closure spans an `untrusted-external` source (the sandbox FX feed with `provenex.source.verified_source = false`) and a `privileged-action` destination (`post_ledger_entry`). The approval span carries `provenex.approval.covers = artifact` — surfacing that the four-eyes control covered the spreadsheet but not its multi-hop provenance.
+The unsafe trace supplies `provenex.source.verified_source = false` on the
+sandbox FX input before `post_ledger_entry`. Its approval span carries
+`provenex.approval.covers = artifact`; the matched twin changes the source to a
+verified feed while retaining the same approval and action shape.
 
-**Recorded offline result: Red**, with binding
-`untrusted-influence-on-privileged-action`. Surfacing the hop for fresh
-approval is a possible response, not an enforcement path tested by this
-fixture.
+**Recorded offline result: Red** on the ledger action under the declared
+invariant. Surfacing the hop for fresh approval is a possible response, not an
+enforcement path tested by this fixture.
 
 ## The one-to-one contrast
 

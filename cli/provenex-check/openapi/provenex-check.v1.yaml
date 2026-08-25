@@ -6,7 +6,10 @@ info:
     Public wire contract for consented, bounded Provenex Check runs. This
     contract describes collector inputs and a strict bounded public response,
     not engine internals. Consumers reject unknown fields and any response that
-    does not declare the exact consented data policy. The included ephemeral
+    does not declare the exact consented data policy. Request v1 optionally
+    negotiates public-report.v2; omission preserves the strict v1 report for
+    deployed clients. V2 requires an opaque client-authored HMAC project scope,
+    which binds local comparisons but is not Provenex authority. The included ephemeral
     Ed25519 key provides report-envelope self-consistency only; it is not a
     Provenex issuer identity or durable attestation. Terminal and HTML views are
     rendered by the CLI, not returned by this API.
@@ -25,16 +28,20 @@ paths:
       requestBody:
         required: true
         description: >-
-          Bounded public collector request: at most 8 consent categories, 10,000
+          Bounded public collector request: at most 12 consent categories, 10,000
           source files, and 256 explicit or discovered artifacts, with at most
-          64 MiB of aggregate UTF-8 content. A scan may include only session,
-          conversation-export, and dependency-audit artifacts; runtime logs and cost evidence require
-          audit. AWS-cost and dependency-audit inputs are each capped at 32.
+          64 MiB of aggregate UTF-8 content. A scan may include session,
+          conversation-export, dependency-audit, and telemetry artifacts; runtime logs and cost evidence require
+          audit. AWS-cost, dependency-audit, and telemetry inputs are each capped at 32.
+          `requested_report_schema` is optional and defaults to
+          `provenex-check-public-report.v1`; updated clients request v2 explicitly
+          and must supply `project_scope` matching `^pvxproj-[0-9a-f]{64}$`.
         x-maxRequestBytes: 134217728
-        x-maxConsentCategories: 8
+        x-maxConsentCategories: 12
         x-maxArtifacts: 256
         x-maxAwsCostArtifacts: 32
         x-maxDependencyAuditArtifacts: 32
+        x-maxTelemetryArtifacts: 32
         content:
           application/json:
             schema:
@@ -44,7 +51,11 @@ paths:
           description: >-
             Strict public Check response with the mandatory applied policy and
             an ephemeral self-consistency envelope around the public report DTO.
-            The CLI rejects a serialized response above 32 MiB.
+            The CLI rejects a serialized response above 32 MiB. Public-report.v2
+            adds a deterministic source-preview/joined mode plus bounded owner
+            claims, remediation, detector-authored verification identity, and
+            a signed echo of the client-authored project scope. That scope binds
+            local comparisons; it is not Provenex authority or tenant identity.
           x-maxResponseBytes: 33554432
           content:
             application/json:

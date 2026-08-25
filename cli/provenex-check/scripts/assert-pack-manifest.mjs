@@ -15,13 +15,17 @@ const EXPECTED_FILES = [
   'src/collector.mjs',
   'src/errors.mjs',
   'src/excludes.mjs',
+  'src/fix-prompt.mjs',
   'src/git.mjs',
   'src/limits.mjs',
   'src/main.mjs',
   'src/output.mjs',
+  'src/plan.mjs',
   'src/policy.mjs',
+  'src/prompt.mjs',
   'src/render.mjs',
   'src/report.mjs',
+  'src/verification.mjs',
 ].sort();
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';

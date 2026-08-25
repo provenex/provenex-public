@@ -16,7 +16,7 @@
     "6. The shell payload exfiltrates to attacker-controlled host via curl or opens a reverse shell.",
     "7. CVE-2025-54135 fix in Cursor 1.3 removes the auto-trust path; new MCP entries now require explicit user confirmation."
   ],
-  "_lineage_notes": "Lineage: untrusted Slack channel content (span 3) is the parent of agent reasoning (span 1). The filesystem mcp.json write (span 5) and shell_exec egress (span 6) both link back to the public-Slack source via the agent invocation. Closure walker from shell_exec walks back via Influence edges through chat -> retrieval -> public-channel source. Cross-zone-composition rule fires: untrusted-external + egress to host shell.",
+  "_lineage_notes": "Observable sequence: public Slack content influences an agent that writes MCP configuration and executes a host command. Expected public result: Red on the command execution.",
   "resourceSpans": [
     {
       "resource": {

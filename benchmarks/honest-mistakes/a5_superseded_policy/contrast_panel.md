@@ -33,12 +33,13 @@ policy_doc(version=superseded, current_exists=true)
 
 > **No action may descend from a source marked superseded when a current version exists.**
 
-The closure spans the superseded policy doc (zone `untrusted-external` per the customer's invariant — *untrusted-for-current-action*) and a `privileged-action` destination (medication order). The `provenex.source.version_state = superseded` and `provenex.source.current_exists = true` attributes carry the disqualifying property.
+The unsafe trace supplies `provenex.source.version_state = superseded` and
+`provenex.source.current_exists = true` on the policy document before the
+medication order. The matched twin changes the source state to `current`.
 
-**Recorded offline result: Red**, with binding
-`untrusted-influence-on-privileged-action`. Denial and re-derivation against
-the current URI would be separate enforcement behavior, not a result measured
-by this fixture.
+**Recorded offline result: Red** on the medication action under the declared
+invariant. Denial and re-derivation against the current URI would be separate
+enforcement behavior, not a result measured by this fixture.
 
 ## The one-to-one contrast
 

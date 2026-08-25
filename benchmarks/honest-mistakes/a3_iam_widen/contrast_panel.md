@@ -37,11 +37,14 @@ vendor_request(origin=external,verified_for=read)
 
 > **No production access-control change may descend from an external, unverified-for-this-scope origin.**
 
-The closure spans `untrusted-external` (the vendor-portal ticket, verified-for read only) and `privileged-action` (the IAM widen via `terraform_apply_iam`). The `provenex.source.origin = external-vendor` and `provenex.source.verified_for = read` attributes on the source-introducing span are what mark it as never verified for `priv-change`.
+The unsafe trace supplies `provenex.source.origin = external-vendor` and
+`provenex.source.verified_for = read` on the ticket that precedes
+`terraform_apply_iam`. The matched twin supplies `internal-approved` and
+`priv-change` for the same action shape.
 
-**Recorded offline result: Red**, with binding
-`untrusted-influence-on-privileged-action`. Approval routing or denial would be
-a separately configured and tested enforcement response.
+**Recorded offline result: Red** on the access-control change under the declared
+invariant. Approval routing or denial would be a separately configured and
+tested enforcement response.
 
 ## The one-to-one contrast
 
