@@ -1873,10 +1873,15 @@ test('OpenAPI documents the complete hosted error surface', async () => {
 test('npm manifest is the scoped public @provenex/check package', async () => {
   const manifest = JSON.parse(await readFile(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
   assert.equal(manifest.name, '@provenex/check');
-  assert.equal(manifest.version, '0.1.0-alpha.3');
+  assert.equal(manifest.version, '0.1.0-alpha.4');
   assert.notEqual(manifest.private, true);
   assert.equal(manifest.publishConfig?.access, 'public');
   assert.equal(manifest.bin['provenex-check'], 'bin/provenex-check.js');
+  // The runtime checkpoint is the package's one importable subpath. The CLI
+  // stays the bin; there is deliberately no root export.
+  assert.deepEqual(Object.keys(manifest.exports), ['./checkpoint', './package.json']);
+  assert.equal(manifest.exports['./checkpoint'].import, './src/checkpoint.mjs');
+  assert.equal(manifest.exports['./checkpoint'].types, './types/checkpoint.d.ts');
 });
 
 test('public response schema exposes only the strict DTO and ephemeral envelope', async () => {

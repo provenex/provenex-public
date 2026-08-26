@@ -11,9 +11,12 @@ const EXPECTED_FILES = [
   'schemas/provenex-check-request.v1.schema.json',
   'schemas/provenex-check-response.v1.schema.json',
   'src/args.mjs',
+  'src/checkpoint.mjs',
   'src/client.mjs',
   'src/collector.mjs',
+  'src/coverage.mjs',
   'src/errors.mjs',
+  'src/explain.mjs',
   'src/excludes.mjs',
   'src/fix-prompt.mjs',
   'src/git.mjs',
@@ -26,6 +29,7 @@ const EXPECTED_FILES = [
   'src/render.mjs',
   'src/report.mjs',
   'src/verification.mjs',
+  'types/checkpoint.d.ts',
 ].sort();
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';

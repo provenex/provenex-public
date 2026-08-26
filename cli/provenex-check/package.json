@@ -1,14 +1,22 @@
 {
   "name": "@provenex/check",
-  "version": "0.1.0-alpha.3",
-  "description": "Consent-first Provenex telemetry and source collector CLI",
+  "version": "0.1.0-alpha.4",
+  "description": "Consent-first Provenex collector CLI and the Provenex App runtime action checkpoint",
   "type": "module",
   "bin": {
     "provenex-check": "bin/provenex-check.js"
   },
+  "exports": {
+    "./checkpoint": {
+      "types": "./types/checkpoint.d.ts",
+      "import": "./src/checkpoint.mjs"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "bin/",
     "src/",
+    "types/",
     "schemas/",
     "openapi/",
     "README.md",

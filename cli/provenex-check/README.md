@@ -4,6 +4,14 @@
 Provenex analysis service. It does not contain, import, download, or execute a
 local Provenex analysis engine.
 
+This package has two deliberately disjoint halves. The CLI documented below is
+a one-shot, consent-first collector a person runs. The
+[runtime action checkpoint](#runtime-action-checkpoint-provenexcheckcheckpoint)
+is a library your server imports from `@provenex/check/checkpoint` to ask the
+Provenex App gateway for a decision before a consequential action runs. The
+CLI never loads the checkpoint module and the checkpoint never loads the
+collector; a test pins the two import graphs apart.
+
 The CLI selects relevant UTF-8 source/configuration files and user-selected
 telemetry, prints the exact upload origin and a byte/category preflight, asks
 for consent, and calls `POST /v1/check/runs`. The service returns a strict,
@@ -344,3 +352,94 @@ ephemeral public key verifies envelope self-consistency only: it does not
 establish Provenex issuer identity, server authenticity, or durable
 attestation. HTTPS and API authentication remain the transport and account
 boundary.
+
+## Runtime action checkpoint (`@provenex/check/checkpoint`)
+
+The runtime half of this package wraps one consequential side effect (a
+refund, an export, an outbound email) with a pre-action decision from the
+tenant-scoped Provenex App gateway. It is plain ESM with no build step and no
+dependencies: the code npm installs is the code you read, plus a hand-authored
+`types/checkpoint.d.ts` that a test pins to the runtime exports.
+
+```js
+import { ProvenexCheckpoint, ProvenexBlockedError } from "@provenex/check/checkpoint";
+
+const checkpoint = new ProvenexCheckpoint({
+  gatewayUrl: "https://app-sandbox.provenex.ai",
+  apiKey: process.env.PROVENEX_SDK_KEY, // tenant-scoped pvx_sdk_ workload key
+  mode: "shadow",                        // observe | shadow | prevent
+});
+
+await checkpoint.guard({ action, scoreClosure }, async () => {
+  await issueRefund(order);              // runs only when the decision allows
+});
+```
+
+The operating modes are a deliberate ramp. `observe` and `shadow` never
+withhold the operation; `shadow` additionally records a verified would-block.
+`prevent` withholds on a verified block and is registration-paired to
+`failMode: "closed"`, so an unreachable gateway stops the action rather than
+silently allowing it. The pairing is enforced at construction because the
+gateway refuses any other registration. Every request has one bounded timeout
+(default 2 seconds), no retry, no redirect, and no cache; retrying a decision
+must never become retrying a side effect, so put financial and message-send
+actions behind a durable idempotent outbox.
+
+The checkpoint sends only an already HMAC-minimized score-closure envelope.
+It never accepts raw prompts, bodies, destinations, receipt ids, or the HMAC
+secret, and tenant and policy identity come only from the workload key, never
+from caller-supplied fields.
+
+### Tenant Guard helpers
+
+`tenantRelation`, `tenantRelationMarkerKey`, and `tenantRelationMarker`
+compute the one Tenant Guard fact that may enter `closure.nodes[].signals`:
+whether the requesting subject's application tenant and the touched resource's
+owner tenant were equal, keyed by the deployed `tenant-match` rule's id. The
+comparison is exact bytes and runs in your process; neither tenant identifier
+belongs in the envelope and the hosted Engine never receives one. Resolve both
+values from trusted state (the session and the row), never from caller input:
+the deployed rule fails closed when the marker is absent, so an unstamped path
+is a coverage gap rather than a clear.
+
+### Workspace coverage (`provenex-check coverage`)
+
+```sh
+export PROVENEX_SDK_KEY='pvx_sdk_...'
+provenex-check coverage --gateway-url https://your-app-gateway.example
+```
+
+Asks YOUR App gateway what it can prove about your workspace right now and
+renders it verbatim: the decision lane this key is registered on, connector
+health, and durable action custody (counts by state, oldest unsettled
+action). The gateway's honesty rule travels with the data: connected is
+credentials, not coverage, and absent areas are "not evaluated", never safe.
+The key is read from the environment only; keys are never CLI arguments.
+
+### What this half proves, and what it does not
+
+Only wrapped call sites are controlled. The honest claim is that routed
+actions were checked, not that the provider is protected: code that reaches a
+provider without passing the checkpoint is invisible to it. The alpha does not
+yet implement local signing, durable outbox state, approval release, or
+receipt upload.
+
+### Explaining a decision (`provenex-check explain`)
+
+Every checkpoint result can be saved as JSON and explained offline:
+
+```sh
+provenex-check explain decision.json --signer-key <64-hex Ed25519 public key>
+```
+
+`explain` accepts a checkpoint result, a gateway decision, an Engine
+assessment, or a bare signed verdict. When the artifact carries its exact
+signed canonical bytes, the verdict section renders FROM those bytes, so what
+you read is what was signed, and any disagreement with the convenience view is
+flagged. With `--signer-key` it checks the Ed25519 signature; without it, it
+says plainly that the signature was not checked. It never re-canonicalizes a
+reconstructed artifact to make a signature pass, it renders per-policy
+coverage (fired, cleared, gap, not applicable) alongside the findings, and it
+ends with what the artifact does not prove: only a PEP-signed enforcement
+receipt shows an action was actually withheld or allowed at a boundary.
+Nothing is uploaded.
