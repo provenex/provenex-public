@@ -4,6 +4,14 @@
 Provenex analysis service. It does not contain, import, download, or execute a
 local Provenex analysis engine.
 
+This package has two deliberately disjoint halves. The CLI documented below is
+a one-shot, consent-first collector a person runs. The
+[runtime action checkpoint](#runtime-action-checkpoint-provenexcheckcheckpoint)
+is a library your server imports from `@provenex/check/checkpoint` to ask the
+Provenex App gateway for a decision before a consequential action runs. The
+CLI never loads the checkpoint module and the checkpoint never loads the
+collector; a test pins the two import graphs apart.
+
 The CLI selects relevant UTF-8 source/configuration files and user-selected
 telemetry, prints the exact upload origin and a byte/category preflight, asks
 for consent, and calls `POST /v1/check/runs`. The service returns a strict,
@@ -344,3 +352,60 @@ ephemeral public key verifies envelope self-consistency only: it does not
 establish Provenex issuer identity, server authenticity, or durable
 attestation. HTTPS and API authentication remain the transport and account
 boundary.
+
+## Runtime action checkpoint (`@provenex/check/checkpoint`)
+
+The runtime half of this package wraps one consequential side effect (a
+refund, an export, an outbound email) with a pre-action decision from the
+tenant-scoped Provenex App gateway. It is plain ESM with no build step and no
+dependencies: the code npm installs is the code you read, plus a hand-authored
+`types/checkpoint.d.ts` that a test pins to the runtime exports.
+
+```js
+import { ProvenexCheckpoint, ProvenexBlockedError } from "@provenex/check/checkpoint";
+
+const checkpoint = new ProvenexCheckpoint({
+  gatewayUrl: "https://app-sandbox.provenex.ai",
+  apiKey: process.env.PROVENEX_SDK_KEY, // tenant-scoped pvx_sdk_ workload key
+  mode: "shadow",                        // observe | shadow | prevent
+});
+
+await checkpoint.guard({ action, scoreClosure }, async () => {
+  await issueRefund(order);              // runs only when the decision allows
+});
+```
+
+The operating modes are a deliberate ramp. `observe` and `shadow` never
+withhold the operation; `shadow` additionally records a verified would-block.
+`prevent` withholds on a verified block and is registration-paired to
+`failMode: "closed"`, so an unreachable gateway stops the action rather than
+silently allowing it. The pairing is enforced at construction because the
+gateway refuses any other registration. Every request has one bounded timeout
+(default 2 seconds), no retry, no redirect, and no cache; retrying a decision
+must never become retrying a side effect, so put financial and message-send
+actions behind a durable idempotent outbox.
+
+The checkpoint sends only an already HMAC-minimized score-closure envelope.
+It never accepts raw prompts, bodies, destinations, receipt ids, or the HMAC
+secret, and tenant and policy identity come only from the workload key, never
+from caller-supplied fields.
+
+### Tenant Guard helpers
+
+`tenantRelation`, `tenantRelationMarkerKey`, and `tenantRelationMarker`
+compute the one Tenant Guard fact that may enter `closure.nodes[].signals`:
+whether the requesting subject's application tenant and the touched resource's
+owner tenant were equal, keyed by the deployed `tenant-match` rule's id. The
+comparison is exact bytes and runs in your process; neither tenant identifier
+belongs in the envelope and the hosted Engine never receives one. Resolve both
+values from trusted state (the session and the row), never from caller input:
+the deployed rule fails closed when the marker is absent, so an unstamped path
+is a coverage gap rather than a clear.
+
+### What this half proves, and what it does not
+
+Only wrapped call sites are controlled. The honest claim is that routed
+actions were checked, not that the provider is protected: code that reaches a
+provider without passing the checkpoint is invisible to it. The alpha does not
+yet implement local signing, durable outbox state, approval release, or
+receipt upload.
