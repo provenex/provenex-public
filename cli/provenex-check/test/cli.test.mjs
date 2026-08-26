@@ -254,8 +254,9 @@ test('no arguments gives a local plan instead of entering the upload path', asyn
   assert.equal(parseArgs([], {}).command, 'plan');
   const result = await runCli([]);
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /Provenex Check plan/);
-  assert.match(result.stdout, /Suggested next command/);
+  assert.match(result.stdout, /^Provenex Check - /m);
+  assert.match(result.stdout, /^Next$/m);
+  assert.match(result.stdout, /provenex-check scan \. .*--dry-run/);
   assert.doesNotMatch(result.stdout, /Upload this bounded dataset|API key not found/);
 });
 
@@ -378,7 +379,7 @@ test('preserves repeated internal spaces and NBSP in the requested and returned 
   assert.equal(result.code, 0, result.stderr);
   assert.equal(captured.target, target);
   assert.equal(targetLabelForRoot(project), target);
-  assert.match(result.stdout, /Evidence preview — no joined business risk was evaluated/);
+  assert.match(result.stdout, /Evidence preview: no joined business risk was evaluated/);
 });
 
 test('rejects a normal run whose signed report echoes a different project scope', async (t) => {
@@ -563,8 +564,10 @@ test('missing production key gives honest alpha trial instructions and remains a
     env: { XDG_CONFIG_HOME: config },
   });
   assert.equal(result.code, 2);
-  assert.match(result.stderr, /obtain a Check API key from your Provenex trial administrator/);
-  assert.match(result.stderr, /self-serve signup is not available in alpha/);
+  assert.match(result.stderr, /Get a trial key at https:\/\/provenex\.ai\/check-app/);
+  // The key error is the last thing many first-time users see, so it has to
+  // route them somewhere that exists and name the command that needs no key.
+  assert.match(result.stderr, /provenex-check demo/);
 });
 
 test('loopback uses only its dev key and ignores production environment and config credentials', async (t) => {
@@ -1075,7 +1078,7 @@ test('unjoined evidence rendering is an intentionally bounded preview with one b
   });
 
   const terminal = renderTerminal(response);
-  assert.match(terminal, /^Evidence preview — no joined business risk was evaluated/m);
+  assert.match(terminal, /^Evidence preview: no joined business risk was evaluated/m);
   assert.match(terminal, /Evidence clues \(showing 3 of 4\)/);
   assert.match(terminal, /Source clue 1/);
   assert.match(terminal, /Source clue 3/);
@@ -2351,7 +2354,7 @@ test('an incomplete hosted analysis preserves the public exit code 3', async (t)
     env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
   });
   assert.equal(result.code, 3, result.stderr);
-  assert.match(result.stdout, /Evidence preview — no joined business risk was evaluated/);
+  assert.match(result.stdout, /Evidence preview: no joined business risk was evaluated/);
   assert.match(result.stdout, /Status: INCOMPLETE/);
   assert.match(result.stdout, /Only part of the selected evidence could be evaluated/);
 });
@@ -2398,12 +2401,18 @@ test('plan inventories local surfaces without uploading', async (t) => {
   });
   const result = await runCli(['plan', project]);
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /GitHub workflows: 1/);
-  assert.match(result.stdout, /MCP \/ agent config files: 1/);
-  assert.match(result.stdout, /Possible trace exports \(not uploaded\): traces\.otlp\.json/);
-  assert.match(result.stdout, /Suggested next command/);
-  assert.match(result.stdout, /--telemetry/);
+  assert.match(result.stdout, /^Provenex Check - sample-project$/m);
+  assert.match(result.stdout, /^Checkable now, from evidence already here$/m);
+  assert.match(result.stdout, /1 CI workflow/);
+  assert.match(result.stdout, /1 MCP\/agent config file/);
+  assert.match(result.stdout, /from traces\.otlp\.json/);
+  assert.match(result.stdout, /^Next$/m);
+  assert.match(result.stdout, /--telemetry traces\.otlp\.json/);
   assert.match(result.stdout, /--dry-run/);
+  // A surface with nothing behind it is not a decision, so it must not print a
+  // row at all. This is what keeps the first run short as the surface list grows.
+  assert.doesNotMatch(result.stdout, /: 0$/m);
+  assert.doesNotMatch(result.stdout, /Agent instruction files/);
   assert.doesNotMatch(result.stdout, /PVX-/);
   assert.doesNotMatch(result.stdout, /indirect-prompt-injection|gadget-chain|confused-deputy/);
 });

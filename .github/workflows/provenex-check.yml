@@ -1,10 +1,10 @@
 name: Provenex Check CLI
 
+# No pull_request path filter, for the same reason as sample-assets.yml: `test`
+# is a required check on main, and a required check that cannot report on a
+# given pull request blocks it permanently rather than skipping it.
 on:
   pull_request:
-    paths:
-      - ".github/workflows/provenex-check.yml"
-      - "cli/provenex-check/**"
   push:
     branches: [main]
     paths:

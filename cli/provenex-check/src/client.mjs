@@ -67,10 +67,14 @@ export async function loadApiKey(origin) {
     handle = await open(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0));
   } catch (error) {
     if (error?.code === 'ENOENT') {
+      // This used to say self-serve signup was unavailable and to ask a trial
+      // administrator. https://provenex.ai/check-app has issued keys by email
+      // since the funnel shipped, so that message sent every first-time user
+      // looking for a person who does not exist.
       throw new UsageError(
-        'API key not found; obtain a Check API key from your Provenex trial administrator '
-        + '(self-serve signup is not available in alpha), then set PROVENEX_API_KEY '
-        + 'or create the owner-only config file',
+        'API key not found. Get a trial key at https://provenex.ai/check-app, '
+        + 'then set PROVENEX_API_KEY or create the owner-only config file. '
+        + 'Meanwhile "provenex-check demo" needs no key and uploads nothing.',
       );
     }
     if (error?.code === 'ELOOP') throw new UsageError('API key config must not be a symbolic link');
