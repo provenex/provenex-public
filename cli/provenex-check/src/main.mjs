@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline/promises';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
+import { renderCoverage } from './coverage.mjs';
 import { parseSignerKey, renderExplain } from './explain.mjs';
 import { parseArgs, usage, VERSION } from './args.mjs';
 import {
@@ -174,6 +175,10 @@ export async function main(argv) {
   if (options.command === 'explain') {
     const signerKey = options.signerKey === null ? null : parseSignerKey(options.signerKey);
     stdout.write(await renderExplain(options.targetPath, { signerKey }));
+    return 0;
+  }
+  if (options.command === 'coverage') {
+    stdout.write(await renderCoverage(options.gatewayUrl));
     return 0;
   }
 

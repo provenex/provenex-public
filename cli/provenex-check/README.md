@@ -402,6 +402,20 @@ values from trusted state (the session and the row), never from caller input:
 the deployed rule fails closed when the marker is absent, so an unstamped path
 is a coverage gap rather than a clear.
 
+### Workspace coverage (`provenex-check coverage`)
+
+```sh
+export PROVENEX_SDK_KEY='pvx_sdk_...'
+provenex-check coverage --gateway-url https://your-app-gateway.example
+```
+
+Asks YOUR App gateway what it can prove about your workspace right now and
+renders it verbatim: the decision lane this key is registered on, connector
+health, and durable action custody (counts by state, oldest unsettled
+action). The gateway's honesty rule travels with the data: connected is
+credentials, not coverage, and absent areas are "not evaluated", never safe.
+The key is read from the environment only; keys are never CLI arguments.
+
 ### What this half proves, and what it does not
 
 Only wrapped call sites are controlled. The honest claim is that routed

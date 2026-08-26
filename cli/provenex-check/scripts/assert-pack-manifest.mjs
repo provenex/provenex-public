@@ -14,6 +14,7 @@ const EXPECTED_FILES = [
   'src/checkpoint.mjs',
   'src/client.mjs',
   'src/collector.mjs',
+  'src/coverage.mjs',
   'src/errors.mjs',
   'src/explain.mjs',
   'src/excludes.mjs',
