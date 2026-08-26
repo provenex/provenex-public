@@ -32,6 +32,18 @@ jobs:
       - name: Test the exact publish boundary
         working-directory: cli/provenex-check
         run: npm test && npm run check:pack
+      # --tag is REQUIRED, not optional. npm 12 refuses to publish a prerelease
+      # without one, and this package's versions are all prereleases:
+      #
+      #   npm error You must specify a tag using --tag when publishing a
+      #   prerelease version.
+      #
+      # `latest` is deliberate and matches the established convention: 0.1.0-alpha.2
+      # already occupies `latest`, and both the README and provenex.ai tell people
+      # to run a bare `npx @provenex/check`, which resolves through `latest`.
+      # Publishing to a side tag instead would leave every one of those users on
+      # the previous alpha while the new one sat unreachable behind a tag nobody
+      # was told to type.
       - name: Publish with npm trusted publishing
         working-directory: cli/provenex-check
-        run: npm publish --access public
+        run: npm publish --access public --tag latest
