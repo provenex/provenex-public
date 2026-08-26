@@ -46,14 +46,25 @@ try {
   throw new Error('npm pack --dry-run did not return its JSON manifest');
 }
 
-assert.equal(manifest.length, 1, 'expected one npm package manifest');
-const actualFiles = manifest[0].files.map(({ path }) => path).sort();
+// npm 11 returns an ARRAY of manifests from `npm pack --json`; npm 12 returns
+// an OBJECT keyed by package name. The publish workflow pins npm 12.0.2 because
+// trusted publishing requires >= 11.5.1, so this script ran green on every
+// developer machine and failed only inside the release, at the one step whose
+// whole job is to guard the published boundary. Normalize both shapes.
+const manifests = Array.isArray(manifest) ? manifest : Object.values(manifest);
+assert.equal(manifests.length, 1, 'expected one npm package manifest');
+const packaged = manifests[0];
+assert.ok(
+  Array.isArray(packaged?.files),
+  'npm pack manifest did not carry a files array; the npm JSON contract changed again',
+);
+const actualFiles = packaged.files.map(({ path }) => path).sort();
 assert.deepEqual(
   actualFiles,
   EXPECTED_FILES,
   'packed source contents changed; review the public/private boundary and update this assertion intentionally',
 );
 
-const executable = manifest[0].files.find(({ path }) => path === 'bin/provenex-check.js');
+const executable = packaged.files.find(({ path }) => path === 'bin/provenex-check.js');
 assert.ok((executable.mode & 0o111) !== 0, 'packaged CLI entry point must remain executable');
 process.stdout.write(`Verified ${actualFiles.length} explicitly approved package files.\n`);
