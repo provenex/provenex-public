@@ -73,7 +73,7 @@ function renderSourcePreviewTerminal(response, verification) {
   const clues = ownerVisibleFindings(report).slice(0, 3);
   const next = strongestNextEvidence(report);
   const lines = [
-    'Evidence preview — no joined business risk was evaluated',
+    'Evidence preview: no joined business risk was evaluated',
     `Target: ${report.target}`,
     `Generated: ${report.generated_at}`,
     `Status: ${report.status.toUpperCase()}`,
@@ -140,7 +140,7 @@ export function renderTerminal(response, { verification = null } = {}) {
   }
 
   const lines = [
-    `Provenex Check — ${report.status.toUpperCase()}`,
+    `Provenex Check: ${report.status.toUpperCase()}`,
     `Target: ${report.target}`,
     `Generated: ${report.generated_at}`,
     '',
@@ -188,7 +188,7 @@ export function renderTerminal(response, { verification = null } = {}) {
 
   lines.push('', 'Coverage');
   for (const coverage of report.coverage) {
-    lines.push(`- ${titleCase(coverage.category)}: ${titleCase(coverage.status)} — ${coverage.detail}`);
+    lines.push(`- ${titleCase(coverage.category)}: ${titleCase(coverage.status)}. ${coverage.detail}`);
   }
   if (!report.coverage.length) lines.push('- No coverage records were emitted.');
   const next = strongestNextEvidence(report);
@@ -211,7 +211,7 @@ function htmlFactList(label, values) {
 function htmlShell(report, body) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Provenex Check — ${escapeHtml(report.target)}</title>
+<title>Provenex Check: ${escapeHtml(report.target)}</title>
 <style>:root{color-scheme:dark;--bg:#161826;--panel:#232532;--panel2:#292b31;--line:#3f424d;--ink:#e9e9ed;--muted:#9397ab;--accent:#9184d9;--good:#5fd39a;--warn:#f0a93b}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.58 Inter,system-ui,sans-serif}main{width:min(920px,calc(100% - 32px));margin:auto;padding:44px 0 72px}header,.section{border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:24px;margin-bottom:18px}h1{font-size:clamp(28px,5vw,48px);line-height:1.08;margin:.2em 0 .35em}h2{font-size:22px;margin:.1em 0 .8em}h3{font-size:20px;line-height:1.3;margin:.2em 0 .5em}h4{margin:0;color:var(--accent);font-size:13px;text-transform:uppercase;letter-spacing:.04em}.meta,.muted{color:var(--muted)}.finding{border-top:1px solid var(--line);padding:24px 0}.finding:first-of-type{border-top:0}.impact{font-size:17px}.join{background:var(--panel2);border-radius:10px;padding:12px 14px}.facts{display:grid;grid-template-columns:150px 1fr;gap:12px;margin:14px 0}.facts ul{margin:0;padding-left:20px}.fix{border-left:3px solid var(--accent);padding-left:14px}.technical{color:var(--muted);font-size:13px}.coverage{list-style:none;padding:0}.coverage li{display:grid;grid-template-columns:180px 140px 1fr;gap:12px;border-top:1px solid var(--line);padding:12px 0}.coverage p{margin:0}.prompt{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:16px;color:var(--ink);font:13px/1.55 ui-monospace,monospace}.preview{border-color:#5d5294}.next{border-left:4px solid var(--warn)}.outcome{border-top:1px solid var(--line);padding:12px 0}.outcome code{color:var(--good)}a{color:#d2cefd}@media(max-width:700px){.facts,.coverage li{grid-template-columns:1fr}}</style></head>
 <body><main>${body}</main></body></html>\n`;
 }

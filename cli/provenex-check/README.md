@@ -29,8 +29,8 @@ arguments it inventories the current project locally. Starting with a scan
 option such as `--dry-run` defaults to `scan .`.
 
 Uploads need a Provenex trial API key (`--dry-run` needs none). Request a trial
-key at [provenex.ai](https://provenex.ai) — it is a bounded trial tenant — and
-set it as `PROVENEX_API_KEY` before a real scan.
+key at [provenex.ai](https://provenex.ai), which issues a bounded trial tenant,
+then set it as `PROVENEX_API_KEY` before a real scan.
 
 A worked source-only example on four public GitHub repositories (what `plan`
 showed, what the scan flagged, and how to read each finding) is in
@@ -60,7 +60,7 @@ source-relative path instead of the compact default preflight.
 On an interactive TTY, `scan` and `audit` first run bounded, metadata-only
 discovery under the well-known Claude Code and Codex session directories. The
 CLI reports `found`, `none`, or `unavailable`. When it finds exact-project
-matches, it asks once—with a default of yes—whether to include the full session
+matches, it asks once, with a default of yes, whether to include the full session
 files for an unjoined review alongside the project scan. This version does not
 yet connect a session action to a source path. Declining leaves every session
 out. The broader trace/export/audit-file catalog stays collapsed behind a
@@ -129,7 +129,7 @@ project subtree. Provenex, Codex, and Claude credential stores are always
 excluded when a broader eligible target contains them, including a custom
 `XDG_CONFIG_HOME`. Known Claude/Codex AI-history roots are pruned from generic
 source traversal. The CLI does not display or upload those local paths. After
-approval and key loading—but before any request—it also rejects selected source
+approval and key loading, but before any request, it also rejects selected source
 or artifact content containing the exact active bearer or its JSON-escaped
 representation. That diagnostic is redacted. `--dry-run` still reads no API
 key.

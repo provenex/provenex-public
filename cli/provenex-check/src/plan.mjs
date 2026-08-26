@@ -198,40 +198,87 @@ export async function renderPlan(targetPath) {
   const sessionMatches = aiHistory.matches.length;
   const languageLine = [...languages.entries()]
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, 8)
-    .map(([name, count]) => `${name} (${count})`)
-    .join(', ') || '(none recognized)';
+    .slice(0, 4)
+    .map(([name, count]) => `${count} ${name}`)
+    .join(', ');
 
   const suggested = ['provenex-check', 'scan', '.'];
   if (sessionMatches > 0) suggested.push('--discover-ai-history');
   if (hits.otelFiles[0]) suggested.push('--telemetry', hits.otelFiles[0]);
   suggested.push('--dry-run');
 
+  // What the consented surfaces on disk unlock, named as outcomes rather than
+  // as a file census. A surface with nothing behind it prints nothing: a row of
+  // zeros is not a decision the reader can act on.
+  const ready = [];
+  const sourceEvidence = [
+    languageLine || null,
+    hits.iac ? `${hits.iac} deploy ${hits.iac === 1 ? 'manifest' : 'manifests'}` : null,
+    hits.workflows ? `${hits.workflows} CI ${hits.workflows === 1 ? 'workflow' : 'workflows'}` : null,
+    hits.mcp ? `${hits.mcp} MCP/agent config ${hits.mcp === 1 ? 'file' : 'files'}` : null,
+    hits.agentDocs ? `${hits.agentDocs} agent instruction ${hits.agentDocs === 1 ? 'file' : 'files'}` : null,
+  ].filter(Boolean);
+  if (sourceEvidence.length) {
+    ready.push([
+      'credential shapes, payment and webhook retries, agent auto-approve, CI trigger scope',
+      `from ${sourceEvidence.join(', ')}`,
+    ]);
+  }
+  if (sessionMatches > 0) {
+    ready.push([
+      'prompt and tool-call review',
+      `from ${sessionMatches} Claude/Codex ${sessionMatches === 1 ? 'session' : 'sessions'} matching this project`,
+    ]);
+  }
+  if (hits.otelFiles.length) {
+    ready.push([
+      'reachable agent composition: untrusted input, privileged data, outbound send',
+      `from ${hits.otelFiles.join(', ')}`,
+    ]);
+  }
+
+  const away = [];
+  if (!hits.otelFiles.length) {
+    away.push([
+      'reachable agent composition: untrusted input, privileged data, outbound send',
+      'needs one runtime trace: --telemetry <otlp.json>',
+    ]);
+  }
+  if (sessionMatches === 0 && aiHistory.status !== 'unavailable') {
+    away.push([
+      'prompt and tool-call review',
+      'needs a session export: --session-input <conversations.json>',
+    ]);
+  }
+
+  const block = (rows) => rows.flatMap(([outcome, detail]) => [`  ${outcome}`, `    ${detail}`]);
+
   const lines = [
-    `Provenex Check plan — ${target}`,
-    `Languages: ${languageLine}`,
-    `GitHub workflows: ${hits.workflows}`,
-    `IaC / deploy manifests: ${hits.iac}`,
-    `MCP / agent config files: ${hits.mcp}`,
-    `Agent instruction files: ${hits.agentDocs}`,
-    `Environment / secret-shaped files: ${hits.envFiles} (contents not read by plan)`,
-    `Host hints: ${[
-      hits.fly ? 'Fly' : null,
-      hits.vercel ? 'Vercel' : null,
-      hits.supabase ? 'Supabase' : null,
-    ].filter(Boolean).join(', ') || '(none)'}`,
-    aiHistory.status === 'unavailable'
-      ? 'Claude/Codex session discovery: unavailable (the bounded metadata check could not finish safely).'
-      : `Claude/Codex sessions with an exact-cwd match: ${sessionMatches} (filenames are not listed)`,
-    hits.otelFiles.length
-      ? `Possible trace exports (not uploaded): ${hits.otelFiles.join(', ')}`
-      : 'No obvious OTLP/trace export filenames were observed.',
-    truncated ? 'Inventory stopped at a traversal bound; treat this list as incomplete.' : null,
+    `Provenex Check - ${target}`,
     '',
-    'Suggested next command (uploads nothing until you drop --dry-run):',
+  ];
+  if (ready.length) {
+    lines.push('Checkable now, from evidence already here', ...block(ready), '');
+  }
+  if (away.length) {
+    lines.push('One export away', ...block(away), '');
+  }
+  if (hits.envFiles) {
+    lines.push(
+      `${hits.envFiles} environment ${hits.envFiles === 1 ? 'file was' : 'files were'} seen and not read; scan excludes credential stores.`,
+      '',
+    );
+  }
+  if (aiHistory.status === 'unavailable') {
+    lines.push('Claude/Codex session discovery could not finish safely; pass --session-input to include one.', '');
+  }
+  if (truncated) {
+    lines.push('Inventory stopped at a traversal bound; treat this list as incomplete.', '');
+  }
+  lines.push(
+    'Next',
     `  ${suggested.map((part) => (part.includes(' ') ? JSON.stringify(part) : part)).join(' ')}`,
-    '',
-    'Run provenex-check capabilities to add telemetry, audit logs, or dependency evidence.',
-  ].filter((line) => line !== null);
+    '  provenex-check demo',
+  );
   return `${lines.join('\n')}\n`;
 }
