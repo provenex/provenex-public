@@ -20,6 +20,7 @@ const ARTIFACT_FLAGS = new Map([
 
 const VALUE_FLAGS = new Set([
   '--api-url',
+  '--signer-key',
   '--json',
   '--html',
   '--verify-against',
@@ -38,12 +39,18 @@ export function usage() {
   provenex-check demo
   provenex-check plan [path]
   provenex-check capabilities
+  provenex-check explain <artifact.json> [--signer-key KEY]
   provenex-check scan [path] [options]
   provenex-check audit [path] [options]
 
 demo renders one built-in Brightcart result without reading files or calling a service.
 plan inventories local evidence surfaces without uploading.
 capabilities lists what each consented surface unlocks.
+explain reads a signed Provenex decision artifact you already hold (a
+checkpoint result, gateway decision, Engine assessment, or signed verdict),
+renders what it establishes and what it does not, and checks the Ed25519
+signature when --signer-key provides the issuer's 32-byte public key (hex or
+base64). Fully offline; nothing is uploaded.
 scan and audit collect a bounded, consented dataset and send it to the hosted
 Provenex API. No analysis engine is bundled or downloaded.
 
@@ -134,11 +141,11 @@ export function parseArgs(argv, env = process.env) {
 
   let command = argv.length === 0 ? 'plan' : 'scan';
   let argumentStart = 0;
-  if (argv[0] === 'scan' || argv[0] === 'audit' || argv[0] === 'demo' || argv[0] === 'plan' || argv[0] === 'capabilities') {
+  if (argv[0] === 'scan' || argv[0] === 'audit' || argv[0] === 'demo' || argv[0] === 'plan' || argv[0] === 'capabilities' || argv[0] === 'explain') {
     command = argv[0];
     argumentStart = 1;
   } else if (argv.length > 0 && !argv[0].startsWith('--')) {
-    throw new UsageError(`expected "demo", "plan", "capabilities", "scan", or "audit"; run with --help for usage`);
+    throw new UsageError(`expected "demo", "plan", "capabilities", "explain", "scan", or "audit"; run with --help for usage`);
   }
 
   const options = {
@@ -149,6 +156,7 @@ export function parseArgs(argv, env = process.env) {
     excludes: [],
     outputs: {},
     verifyAgainst: null,
+    signerKey: null,
     listFiles: false,
     requestTimeoutMs: null,
     dryRun: false,
@@ -203,6 +211,8 @@ export function parseArgs(argv, env = process.env) {
       options.outputs.json = taken.value;
     } else if (flag === '--html') {
       options.outputs.html = taken.value;
+    } else if (flag === '--signer-key') {
+      options.signerKey = taken.value;
     } else if (flag === '--verify-against') {
       options.verifyAgainst = path.resolve(taken.value);
     } else if (flag === '--timeout') {
@@ -240,6 +250,30 @@ export function parseArgs(argv, env = process.env) {
     if (artifact.kind === 'telemetry') artifact.format = options.telemetryFormat;
   }
 
+  if (command === 'explain') {
+    if (positionals.length !== 1) {
+      throw new UsageError('explain takes exactly one artifact file path');
+    }
+    if (
+      options.artifacts.length > 0
+      || options.excludes.length > 0
+      || options.dryRun
+      || options.yes
+      || options.noPrompt
+      || options.discoverAiHistory
+      || options.outputs.json
+      || options.outputs.html
+      || options.verifyAgainst
+      || options.requestTimeoutMs !== null
+      || options.listFiles
+    ) {
+      throw new UsageError('explain reads one local artifact; it takes only --signer-key');
+    }
+    return options;
+  }
+  if (options.signerKey !== null) {
+    throw new UsageError('--signer-key applies only to explain');
+  }
   if (command === 'demo' || command === 'plan' || command === 'capabilities') {
     if (
       options.artifacts.length > 0

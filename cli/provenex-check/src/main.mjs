@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline/promises';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
+import { parseSignerKey, renderExplain } from './explain.mjs';
 import { parseArgs, usage, VERSION } from './args.mjs';
 import {
   collectDataset,
@@ -168,6 +169,11 @@ export async function main(argv) {
   }
   if (options.command === 'plan') {
     stdout.write(await renderPlan(options.targetPath));
+    return 0;
+  }
+  if (options.command === 'explain') {
+    const signerKey = options.signerKey === null ? null : parseSignerKey(options.signerKey);
+    stdout.write(await renderExplain(options.targetPath, { signerKey }));
     return 0;
   }
 

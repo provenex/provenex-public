@@ -409,3 +409,23 @@ actions were checked, not that the provider is protected: code that reaches a
 provider without passing the checkpoint is invisible to it. The alpha does not
 yet implement local signing, durable outbox state, approval release, or
 receipt upload.
+
+### Explaining a decision (`provenex-check explain`)
+
+Every checkpoint result can be saved as JSON and explained offline:
+
+```sh
+provenex-check explain decision.json --signer-key <64-hex Ed25519 public key>
+```
+
+`explain` accepts a checkpoint result, a gateway decision, an Engine
+assessment, or a bare signed verdict. When the artifact carries its exact
+signed canonical bytes, the verdict section renders FROM those bytes, so what
+you read is what was signed, and any disagreement with the convenience view is
+flagged. With `--signer-key` it checks the Ed25519 signature; without it, it
+says plainly that the signature was not checked. It never re-canonicalizes a
+reconstructed artifact to make a signature pass, it renders per-policy
+coverage (fired, cleared, gap, not applicable) alongside the findings, and it
+ends with what the artifact does not prove: only a PEP-signed enforcement
+receipt shows an action was actually withheld or allowed at a boundary.
+Nothing is uploaded.

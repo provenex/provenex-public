@@ -15,6 +15,7 @@ const EXPECTED_FILES = [
   'src/client.mjs',
   'src/collector.mjs',
   'src/errors.mjs',
+  'src/explain.mjs',
   'src/excludes.mjs',
   'src/fix-prompt.mjs',
   'src/git.mjs',
