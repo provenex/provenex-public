@@ -1,14 +1,19 @@
 name: Public sample assets
 
+# WHY THERE IS NO pull_request PATH FILTER.
+#
+# `validate` is a required status check on main, and so is `test` in
+# provenex-check.yml. Both used to be path filtered, which deadlocked the
+# repository: a pull request touching only cli/provenex-check ran `test` and
+# never ran `validate`, so it could never satisfy both required checks, and a
+# pull request touching only docs or samples had the same problem in reverse.
+# Measured 2026-08-26 on the alpha.3 CLI fix, which sat MERGEABLE and BLOCKED
+# with one passing check and one that could never report.
+#
+# A required check must be able to report on every pull request. The push
+# filter below is kept: on main the job is a re-run, not a gate.
 on:
   pull_request:
-    paths:
-      - ".github/workflows/sample-assets.yml"
-      - "benchmarks/**"
-      - "docs/**"
-      - "samples/**"
-      - "README.md"
-      - "SECURITY.md"
   push:
     branches: [main]
     paths:
