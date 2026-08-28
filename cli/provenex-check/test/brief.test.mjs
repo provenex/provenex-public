@@ -36,8 +36,8 @@ function payload(overrides = {}) {
         category: 'action-outcomes',
         title: 'Verify 1 action missing execution proof',
         why: 'Provenex cannot establish whether the operation ran.',
-        nextStep: 'Open Provenex App and check the provider outcome before retrying.',
-        appPath: '/overview',
+        nextStep: 'Open App settings and ask the alpha team for an outcome review before retrying.',
+        appPath: '/settings',
       },
     ],
     honesty: 'This covers only the areas evaluated by this workspace. Absent areas are not evaluated, never safe.',
@@ -66,8 +66,8 @@ test('brief fetches the server-authored action feed and renders plain next steps
   assert.match(out, /^Provenex brief: 1 thing needs your attention/m);
   assert.match(out, /^Do now$/m);
   assert.match(out, /Why: Provenex cannot establish whether the operation ran\./);
-  assert.match(out, /Next: Open Provenex App/);
-  assert.match(out, /Open: \/overview/);
+  assert.match(out, /Next: Open App settings/);
+  assert.match(out, /Open: \/settings/);
   assert.match(out, /not evaluated, never safe\.$/m);
 });
 

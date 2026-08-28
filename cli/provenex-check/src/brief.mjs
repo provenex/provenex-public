@@ -21,7 +21,13 @@ const HEALTH_STATES = new Set([
 ]);
 const PRIORITIES = new Set(['now', 'next']);
 const CATEGORIES = new Set(['held-actions', 'action-outcomes', 'connections', 'setup']);
-const APP_PATHS = new Set(['/overview', '/connections', '/guardrails', '/findings']);
+const APP_PATHS = new Set([
+  '/overview',
+  '/connections',
+  '/guardrails',
+  '/findings',
+  '/settings',
+]);
 
 function member(value, allowed, label) {
   if (typeof value !== 'string' || !allowed.has(value)) {
