@@ -11,6 +11,8 @@
   retention contract.
 - [Credentials and verification](key-management.md): API-key sources,
   production-origin pinning, response signatures, and local report files.
+- [Provenex App owner brief](app-owner-brief.md): private-alpha text and JSON
+  action feed for a person or their agent.
 
 ## Evidence inputs
 

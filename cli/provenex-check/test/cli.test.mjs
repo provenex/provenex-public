@@ -328,7 +328,7 @@ test('posts the public request shape, writes explicit outputs, and preserves ser
 
   assert.equal(result.code, 1, result.stderr);
   assert.equal(authorization, `Bearer ${TEST_DEV_TOKEN}`);
-  assert.equal(userAgent, 'provenex-check/0.1.0-alpha.5');
+  assert.equal(userAgent, 'provenex-check/0.1.0-alpha.6');
   assert.equal(captured.schema_version, 'provenex-check-request.v1');
   assert.equal(captured.requested_report_schema, 'provenex-check-public-report.v2');
   assert.match(captured.project_scope, /^pvxproj-[0-9a-f]{64}$/);
@@ -1873,7 +1873,7 @@ test('OpenAPI documents the complete hosted error surface', async () => {
 test('npm manifest is the scoped public @provenex/check package', async () => {
   const manifest = JSON.parse(await readFile(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
   assert.equal(manifest.name, '@provenex/check');
-  assert.equal(manifest.version, '0.1.0-alpha.5');
+  assert.equal(manifest.version, '0.1.0-alpha.6');
   // The 0.1.0-alpha.4 tarball shipped with package.json bumped and VERSION
   // still reading alpha.3, so the published CLI misreported itself from
   // --version and in its user-agent. Nothing cross-checked the two. This

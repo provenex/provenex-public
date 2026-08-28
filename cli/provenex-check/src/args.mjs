@@ -2,7 +2,7 @@ import path from 'node:path';
 import { UsageError } from './errors.mjs';
 import { EXCLUDE_LIMITS, SERVER_LIMITS } from './limits.mjs';
 
-export const VERSION = '0.1.0-alpha.5';
+export const VERSION = '0.1.0-alpha.6';
 
 export const REQUEST_TIMEOUT = Object.freeze({
   defaultSeconds: 30 * 60,
@@ -22,6 +22,7 @@ const VALUE_FLAGS = new Set([
   '--api-url',
   '--signer-key',
   '--gateway-url',
+  '--format',
   '--json',
   '--html',
   '--verify-against',
@@ -41,7 +42,8 @@ export function usage() {
   provenex-check plan [path]
   provenex-check capabilities
   provenex-check explain <artifact.json> [--signer-key KEY]
-  provenex-check coverage --gateway-url ORIGIN
+  provenex-check coverage [--gateway-url ORIGIN]
+  provenex-check brief [--gateway-url ORIGIN] [--format text|json]
   provenex-check scan [path] [options]
   provenex-check audit [path] [options]
 
@@ -56,6 +58,9 @@ base64). Fully offline; nothing is uploaded.
 coverage asks YOUR Provenex App gateway (never the hosted engine) what it can
 prove about your workspace right now and renders it verbatim: connected is
 credentials, not coverage, and absent areas are "not evaluated", never safe.
+brief asks that same gateway for a server-authored, prioritized owner brief.
+The default is plain text; --format json prints the strict, bounded brief DTO
+to stdout for an agent. The public CLI does not decide which actions matter.
 The workload key is read from PROVENEX_SDK_KEY; keys are never CLI arguments.
 scan and audit collect a bounded, consented dataset and send it to the hosted
 Provenex API. No analysis engine is bundled or downloaded.
@@ -63,6 +68,9 @@ Provenex API. No analysis engine is bundled or downloaded.
 Options:
   --api-url URL              Loopback development override only; production is
                              pinned to https://api.provenex.ai
+  --gateway-url URL          Provenex App gateway for coverage or brief; may be
+                             set once with PROVENEX_APP_GATEWAY_URL
+  --format text|json         Brief output (default text; JSON goes to stdout)
   --session-input PATH       Add session JSONL or conversations.json (repeatable)
   --telemetry PATH           Add runtime traces (OTLP JSON by default; repeatable)
   --telemetry-format FORMAT  Format for --telemetry (default otel; also langfuse,
@@ -147,11 +155,11 @@ export function parseArgs(argv, env = process.env) {
 
   let command = argv.length === 0 ? 'plan' : 'scan';
   let argumentStart = 0;
-  if (argv[0] === 'scan' || argv[0] === 'audit' || argv[0] === 'demo' || argv[0] === 'plan' || argv[0] === 'capabilities' || argv[0] === 'explain' || argv[0] === 'coverage') {
+  if (argv[0] === 'scan' || argv[0] === 'audit' || argv[0] === 'demo' || argv[0] === 'plan' || argv[0] === 'capabilities' || argv[0] === 'explain' || argv[0] === 'coverage' || argv[0] === 'brief') {
     command = argv[0];
     argumentStart = 1;
   } else if (argv.length > 0 && !argv[0].startsWith('--')) {
-    throw new UsageError(`expected "demo", "plan", "capabilities", "explain", "coverage", "scan", or "audit"; run with --help for usage`);
+    throw new UsageError(`expected "demo", "plan", "capabilities", "explain", "coverage", "brief", "scan", or "audit"; run with --help for usage`);
   }
 
   const options = {
@@ -164,6 +172,8 @@ export function parseArgs(argv, env = process.env) {
     verifyAgainst: null,
     signerKey: null,
     gatewayUrl: null,
+    format: 'text',
+    formatExplicit: false,
     listFiles: false,
     requestTimeoutMs: null,
     dryRun: false,
@@ -181,6 +191,7 @@ export function parseArgs(argv, env = process.env) {
     },
   };
   const positionals = [];
+  const seenFlags = new Set();
 
   for (let index = argumentStart; index < argv.length; index += 1) {
     const raw = argv[index];
@@ -196,6 +207,7 @@ export function parseArgs(argv, env = process.env) {
     if (flag === '--version') return { version: true };
     if (flag === '--dry-run' || flag === '--yes' || flag === '--force' || flag === '--discover-ai-history' || flag === '--no-prompt' || flag === '--list-files') {
       if (inlineValue !== undefined) throw new UsageError(`${flag} does not take a value`);
+      seenFlags.add(flag);
       if (flag === '--dry-run') options.dryRun = true;
       if (flag === '--yes') options.yes = true;
       if (flag === '--force') options.force = true;
@@ -205,6 +217,7 @@ export function parseArgs(argv, env = process.env) {
       continue;
     }
     if (!VALUE_FLAGS.has(flag)) throw new UsageError(`unknown option: ${flag}`);
+    seenFlags.add(flag);
 
     const taken = takeValue(argv, index, inlineValue, flag);
     index = taken.next;
@@ -222,6 +235,9 @@ export function parseArgs(argv, env = process.env) {
       options.signerKey = taken.value;
     } else if (flag === '--gateway-url') {
       options.gatewayUrl = taken.value;
+    } else if (flag === '--format') {
+      options.format = taken.value;
+      options.formatExplicit = true;
     } else if (flag === '--verify-against') {
       options.verifyAgainst = path.resolve(taken.value);
     } else if (flag === '--timeout') {
@@ -259,33 +275,37 @@ export function parseArgs(argv, env = process.env) {
     if (artifact.kind === 'telemetry') artifact.format = options.telemetryFormat;
   }
 
-  if (command === 'coverage') {
+  if (command === 'coverage' || command === 'brief') {
     if (positionals.length > 0) {
-      throw new UsageError('coverage does not take a path; point it with --gateway-url');
+      throw new UsageError(`${command} does not take a path; point it with --gateway-url`);
+    }
+    if (!options.gatewayUrl && typeof env.PROVENEX_APP_GATEWAY_URL === 'string') {
+      options.gatewayUrl = env.PROVENEX_APP_GATEWAY_URL.trim() || null;
     }
     if (!options.gatewayUrl) {
-      throw new UsageError('coverage requires --gateway-url, the base origin of your App gateway');
+      throw new UsageError(
+        `${command} requires --gateway-url or PROVENEX_APP_GATEWAY_URL, the base origin of your App gateway`,
+      );
     }
-    if (
-      options.artifacts.length > 0
-      || options.excludes.length > 0
-      || options.dryRun
-      || options.yes
-      || options.noPrompt
-      || options.discoverAiHistory
-      || options.outputs.json
-      || options.outputs.html
-      || options.verifyAgainst
-      || options.requestTimeoutMs !== null
-      || options.listFiles
-      || options.signerKey !== null
-    ) {
+    const allowedFlags = command === 'brief'
+      ? new Set(['--gateway-url', '--format'])
+      : new Set(['--gateway-url']);
+    if ([...seenFlags].some((flag) => !allowedFlags.has(flag))) {
+      throw new UsageError(`${command} takes only --gateway-url${command === 'brief' ? ' and --format' : ''}`);
+    }
+    if (command === 'coverage' && options.formatExplicit) {
       throw new UsageError('coverage takes only --gateway-url');
+    }
+    if (command === 'brief' && options.format !== 'text' && options.format !== 'json') {
+      throw new UsageError('--format must be text or json');
     }
     return options;
   }
   if (options.gatewayUrl !== null) {
-    throw new UsageError('--gateway-url applies only to coverage');
+    throw new UsageError('--gateway-url applies only to coverage or brief');
+  }
+  if (options.formatExplicit) {
+    throw new UsageError('--format applies only to brief');
   }
   if (command === 'explain') {
     if (positionals.length !== 1) {

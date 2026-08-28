@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { renderCoverage } from './coverage.mjs';
+import { renderBrief } from './brief.mjs';
 import { parseSignerKey, renderExplain } from './explain.mjs';
 import { parseArgs, usage, VERSION } from './args.mjs';
 import {
@@ -179,6 +180,10 @@ export async function main(argv) {
   }
   if (options.command === 'coverage') {
     stdout.write(await renderCoverage(options.gatewayUrl));
+    return 0;
+  }
+  if (options.command === 'brief') {
+    stdout.write(await renderBrief(options.gatewayUrl, { format: options.format }));
     return 0;
   }
 

@@ -1,7 +1,15 @@
 {
   "name": "@provenex/check",
-  "version": "0.1.0-alpha.5",
-  "description": "Consent-first Provenex collector CLI and the Provenex App runtime action checkpoint",
+  "version": "0.1.0-alpha.6",
+  "description": "Server-backed checks and runtime guardrails for AI-powered apps, with an agent-readable owner brief",
+  "keywords": [
+    "ai-agents",
+    "agent-safety",
+    "ecommerce",
+    "runtime-guardrails",
+    "observability",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "provenex-check": "bin/provenex-check.js"

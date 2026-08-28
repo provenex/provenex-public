@@ -5,33 +5,86 @@
 // evaluated", never "safe". The workload key is read from PROVENEX_SDK_KEY
 // only; keys are never accepted on the command line.
 
+import {
+  fetchAppJson,
+  plainRecord,
+  safeIdentifier,
+  safeText,
+  safeTimestamp,
+  validateGatewayOrigin,
+} from './app-client.mjs';
 import { UsageError } from './errors.mjs';
 
-const REQUEST_TIMEOUT_MS = 10_000;
-const MAX_RESPONSE_BYTES = 256 * 1024;
-const SDK_KEY = /^pvx_sdk_[A-Za-z0-9_-]{8,}$/;
+export { validateGatewayOrigin };
 
-export function validateGatewayOrigin(base) {
-  let url;
-  try {
-    url = new URL(base);
-  } catch {
-    throw new UsageError('--gateway-url must be an absolute URL');
+const AREA_STATES = new Set([
+  'covered',
+  'partial',
+  'not-connected',
+  'not-assessed-here',
+]);
+
+export function validateCoverage(value) {
+  if (
+    !plainRecord(value)
+    || value.schemaVersion !== 1
+    || !Array.isArray(value.areas)
+    || value.areas.length > 12
+  ) {
+    throw new UsageError('the gateway returned an unsupported coverage schema');
   }
-  if (url.username || url.password || url.search || url.hash) {
-    throw new UsageError('--gateway-url must not contain credentials, query, or fragment');
-  }
-  const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) {
-    throw new UsageError('--gateway-url must use HTTPS (HTTP is allowed only on loopback)');
-  }
-  if (url.hostname === 'provenex-verdict.fly.dev') {
-    throw new UsageError('--gateway-url must be your Provenex App gateway, not the hosted Engine');
-  }
-  if (url.pathname !== '/' && url.pathname !== '') {
-    throw new UsageError('--gateway-url must be a base origin without an API path');
-  }
-  return url;
+  const areaIds = new Set();
+  const areas = value.areas.map((area) => {
+    if (!plainRecord(area)) throw new UsageError('the gateway returned an invalid coverage area');
+    const id = safeIdentifier(area.area, 'coverage area id');
+    if (areaIds.has(id)) throw new UsageError('the gateway returned a duplicate coverage area');
+    areaIds.add(id);
+    if (!AREA_STATES.has(area.state)) {
+      throw new UsageError('the gateway returned an invalid coverage area state');
+    }
+    const projected = {
+      area: id,
+      state: area.state,
+      evidence: safeText(area.evidence, 'coverage evidence', { maximum: 1_024 }),
+    };
+    if (plainRecord(area.counts)) {
+      const entries = Object.entries(area.counts);
+      if (entries.length > 16) throw new UsageError('the gateway returned too many custody counts');
+      projected.counts = Object.fromEntries(entries.map(([state, count]) => {
+        const safeState = safeIdentifier(state, 'custody state');
+        if (!Number.isSafeInteger(count) || count < 0) {
+          throw new UsageError('the gateway returned an invalid custody count');
+        }
+        return [safeState, count];
+      }));
+    }
+    if (Object.hasOwn(area, 'truncated')) {
+      if (typeof area.truncated !== 'boolean') {
+        throw new UsageError('the gateway returned an invalid custody truncation flag');
+      }
+      projected.truncated = area.truncated;
+    }
+    if (Object.hasOwn(area, 'oldestUnsettledEnqueuedAt')) {
+      projected.oldestUnsettledEnqueuedAt = safeTimestamp(
+        area.oldestUnsettledEnqueuedAt,
+        'oldest unsettled timestamp',
+      );
+    }
+    if (Object.hasOwn(area, 'sampledUnsettledEnqueuedAt')) {
+      projected.sampledUnsettledEnqueuedAt = safeTimestamp(
+        area.sampledUnsettledEnqueuedAt,
+        'sampled unsettled timestamp',
+      );
+    }
+    return projected;
+  });
+  return {
+    schemaVersion: 1,
+    generatedAt: safeTimestamp(value.generatedAt, 'coverage timestamp'),
+    workspaceId: safeIdentifier(value.workspaceId, 'workspace id'),
+    honesty: safeText(value.honesty, 'coverage note', { maximum: 768 }),
+    areas,
+  };
 }
 
 function stateBadge(state) {
@@ -44,50 +97,9 @@ function stateBadge(state) {
 }
 
 export async function renderCoverage(gatewayUrl, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
-  const origin = validateGatewayOrigin(gatewayUrl);
-  const key = (env.PROVENEX_SDK_KEY ?? '').trim();
-  if (!SDK_KEY.test(key)) {
-    throw new UsageError(
-      'set PROVENEX_SDK_KEY to a tenant-scoped pvx_sdk_ workload key; keys are never accepted as arguments',
-    );
-  }
-  const endpoint = new URL('/api/sdk/v1/coverage', origin);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let response;
-  try {
-    response = await fetchImpl(endpoint, {
-      method: 'GET',
-      redirect: 'error',
-      cache: 'no-store',
-      credentials: 'omit',
-      signal: controller.signal,
-      headers: { accept: 'application/json', authorization: `Bearer ${key}` },
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new UsageError(`the gateway did not answer within ${REQUEST_TIMEOUT_MS}ms`);
-    }
-    throw new UsageError('the gateway request failed; check --gateway-url and your network');
-  } finally {
-    clearTimeout(timer);
-  }
-  const raw = await response.text();
-  if (raw.length > MAX_RESPONSE_BYTES) {
-    throw new UsageError('the gateway response exceeded the coverage size bound');
-  }
-  let body;
-  try {
-    body = JSON.parse(raw);
-  } catch {
-    throw new UsageError(`the gateway returned HTTP ${response.status} without valid JSON`);
-  }
-  if (!response.ok) {
-    throw new UsageError(`the gateway refused coverage: HTTP ${response.status}: ${body?.error ?? 'no detail'}`);
-  }
-  if (body?.schemaVersion !== 1 || !Array.isArray(body.areas)) {
-    throw new UsageError('the gateway returned an unsupported coverage schema');
-  }
+  const body = validateCoverage(
+    await fetchAppJson(gatewayUrl, '/api/sdk/v1/coverage', { env, fetchImpl }),
+  );
 
   const out = [];
   out.push(`Provenex coverage: workspace ${body.workspaceId ?? '(unnamed)'}`);
@@ -106,6 +118,9 @@ export async function renderCoverage(gatewayUrl, { env = process.env, fetchImpl 
     }
     if (typeof area.oldestUnsettledEnqueuedAt === 'string') {
       out.push(`  oldest unsettled action enqueued at ${area.oldestUnsettledEnqueuedAt}`);
+    }
+    if (typeof area.sampledUnsettledEnqueuedAt === 'string') {
+      out.push(`  sampled unsettled action enqueued at ${area.sampledUnsettledEnqueuedAt}`);
     }
     out.push('');
   }
