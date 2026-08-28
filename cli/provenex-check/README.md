@@ -416,6 +416,37 @@ action). The gateway's honesty rule travels with the data: connected is
 credentials, not coverage, and absent areas are "not evaluated", never safe.
 The key is read from the environment only; keys are never CLI arguments.
 
+### Owner brief (`provenex-check brief`)
+
+Accepted App design partners can configure the gateway origin in the
+environment and ask for the server-authored priorities in human or agent form:
+
+```sh
+export PROVENEX_APP_GATEWAY_URL='https://your-app-gateway.example'
+export PROVENEX_SDK_KEY='pvx_sdk_...'
+
+provenex-check brief
+provenex-check brief --format json
+```
+
+The text view contains only what needs action, why, and the next step. JSON is
+a strict schema-versioned projection written to standard output without a
+prompt or ANSI controls. Unknown fields are discarded before output. The
+gateway composes the action list from workspace-scoped facts; this public CLI
+does not contain or run detectors, policies, or prioritization logic.
+
+The command is read only. It cannot approve, retry, release, or execute an
+action. An empty action list means only that the areas evaluated by this brief
+produced no owner action; connected remains credentials rather than coverage,
+and absent areas remain not evaluated, never safe. See the
+[App owner brief](../../docs/app-owner-brief.md) for credential handling and a
+bounded agent instruction.
+
+Provision a separate key with `brief:read` for an owner or general-purpose AI.
+Add `coverage:read` only if it also needs the coverage command. Legacy
+`decide` keys remain accepted by the gateway for compatibility, but must not be
+given to a morning-brief agent.
+
 ### What this half proves, and what it does not
 
 Only wrapped call sites are controlled. The honest claim is that routed

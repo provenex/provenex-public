@@ -93,7 +93,11 @@ test('gateway origins follow the checkpoint rules', () => {
   for (const bad of [
     'not a url',
     'http://app-sandbox.provenex.ai',
+    'https://api.provenex.ai',
+    'https://api.provenex.ai:444',
+    'https://api.provenex.ai.:444',
     'https://provenex-verdict.fly.dev',
+    'https://provenex-verdict.fly.dev:444',
     'https://app-sandbox.provenex.ai/api',
     'https://user:pw@app-sandbox.provenex.ai',
   ]) {
@@ -102,10 +106,14 @@ test('gateway origins follow the checkpoint rules', () => {
 });
 
 test('coverage argument rules: --gateway-url required, nothing else allowed', () => {
-  const options = parseArgs(['coverage', '--gateway-url', 'https://app-sandbox.provenex.ai']);
+  const options = parseArgs(['coverage', '--gateway-url', 'https://app-sandbox.provenex.ai'], {});
   assert.equal(options.command, 'coverage');
   assert.equal(options.gatewayUrl, 'https://app-sandbox.provenex.ai');
-  assert.throws(() => parseArgs(['coverage']), /requires --gateway-url/);
+  assert.throws(() => parseArgs(['coverage'], {}), /requires --gateway-url/);
+  assert.equal(
+    parseArgs(['coverage'], { PROVENEX_APP_GATEWAY_URL: 'https://saved.example' }).gatewayUrl,
+    'https://saved.example',
+  );
   assert.throws(() => parseArgs(['coverage', '.', '--gateway-url', 'https://x.example']), UsageError);
   assert.throws(
     () => parseArgs(['coverage', '--gateway-url', 'https://x.example', '--json', 'out.json']),

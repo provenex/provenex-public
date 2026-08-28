@@ -36,6 +36,25 @@ See [public CLI onboarding](docs/onboarding.md) for the complete path and
 [`cli/provenex-check/README.md`](cli/provenex-check/README.md) for every input
 and safety control.
 
+## Ask a provisioned App what needs you
+
+Private-alpha App workspaces can request a server-authored owner brief through
+the same public package. Manual onboarding supplies the App gateway and a
+separate tenant-scoped `brief:read` workload key:
+
+```sh
+export PROVENEX_APP_GATEWAY_URL='https://your-app-gateway.example'
+export PROVENEX_SDK_KEY='pvx_sdk_...'
+npx @provenex/check brief
+npx @provenex/check brief --format json
+```
+
+Text is for the owner; strict JSON is for an agent or morning update. Detection,
+prioritization, and workspace data stay on the App gateway. The CLI only
+authenticates, validates, and renders the bounded result. See the
+[App owner brief](docs/app-owner-brief.md) for the agent prompt and coverage
+boundary.
+
 ## Website example
 
 [provenex.ai/check-app](https://provenex.ai/check-app) opens a static,
@@ -74,6 +93,8 @@ the [current install notice](docs/install.md).
   contract.
 - [`docs/provenex-check-data-policy.md`](docs/provenex-check-data-policy.md):
   upload, processing, and retention contract.
+- [`docs/app-owner-brief.md`](docs/app-owner-brief.md): private-alpha human and
+  agent brief, credential setup, and read-only boundary.
 - [`docs/telemetry-checklist.md`](docs/telemetry-checklist.md): supported
   telemetry inputs and fields.
 - [`docs/what-provenex-cannot-see.md`](docs/what-provenex-cannot-see.md):
