@@ -1,4 +1,6 @@
-import { buildCodexFixPrompt } from './fix-prompt.mjs';
+import { buildCodingAgentFixPrompt } from './fix-prompt.mjs';
+
+const CODING_AGENT_PROMPT_LABEL = 'Paste-ready fix prompt for Cursor, Claude, Codex, or your coding agent';
 
 const NEXT_EVIDENCE_PRIORITY = Object.freeze([
   'ai_sessions',
@@ -106,9 +108,9 @@ function renderSourcePreviewTerminal(response, verification) {
   if (promptFinding) {
     lines.push(
       '',
-      'Paste-ready Codex fix prompt for the first supported finding',
+      CODING_AGENT_PROMPT_LABEL,
       '-----',
-      buildCodexFixPrompt(promptFinding, report),
+      buildCodingAgentFixPrompt(promptFinding, report),
       '-----',
     );
   }
@@ -179,9 +181,9 @@ export function renderTerminal(response, { verification = null } = {}) {
   if (promptFinding) {
     lines.push(
       '',
-      'Paste-ready Codex fix prompt for the first supported finding',
+      CODING_AGENT_PROMPT_LABEL,
       '-----',
-      buildCodexFixPrompt(promptFinding, report),
+      buildCodingAgentFixPrompt(promptFinding, report),
       '-----',
     );
   }
@@ -230,7 +232,7 @@ function renderSourcePreviewHtml(response, verification) {
     : '';
   const promptFinding = visibleClues.find((finding) => finding.owner_view.verification_key !== null);
   const promptHtml = promptFinding
-    ? `<section class="section"><details><summary>Paste this bounded finding fix prompt into Codex</summary><pre class="prompt">${escapeHtml(buildCodexFixPrompt(promptFinding, report))}</pre></details></section>`
+    ? `<section class="section"><details><summary>${CODING_AGENT_PROMPT_LABEL}</summary><pre class="prompt">${escapeHtml(buildCodingAgentFixPrompt(promptFinding, report))}</pre></details></section>`
     : '';
   return htmlShell(report, `<header class="preview"><p class="meta">${escapeHtml(report.generated_at)} · ${escapeHtml(report.target)} · ${escapeHtml(report.status)}</p><h1>Evidence preview</h1><p class="impact">No joined business risk was evaluated.</p><p class="muted">Shows at most three evidence clues. Use --json on a run to save the complete validated response.</p></header><section class="section"><h2>Evidence clues${report.findings.length ? ` · showing ${Math.min(3, report.findings.length)} of ${report.findings.length}` : ''}</h2>${clues || '<p>No evidence clues were emitted.</p>'}</section>${incompleteHtml}${nextHtml}${verificationHtml(verification)}${promptHtml}`);
 }
@@ -255,7 +257,7 @@ export function renderHtml(response, { verification = null } = {}) {
     ? visibleFindings.map((finding) => {
       const owner = finding.owner_view;
       const prompt = finding === promptFinding
-        ? `<details><summary>Paste this fix prompt into Codex</summary><pre class="prompt">${escapeHtml(buildCodexFixPrompt(finding, report))}</pre></details>`
+        ? `<details><summary>${CODING_AGENT_PROMPT_LABEL}</summary><pre class="prompt">${escapeHtml(buildCodingAgentFixPrompt(finding, report))}</pre></details>`
         : '';
       const changes = owner.remediation.changes.length
         ? `<ul>${owner.remediation.changes.map((change) => `<li>${escapeHtml(change)}</li>`).join('')}</ul>`

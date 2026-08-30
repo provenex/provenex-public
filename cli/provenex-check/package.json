@@ -1,6 +1,6 @@
 {
   "name": "@provenex/check",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "description": "Server-backed checks and runtime guardrails for AI-powered apps, with an agent-readable owner brief",
   "keywords": [
     "ai-agents",
