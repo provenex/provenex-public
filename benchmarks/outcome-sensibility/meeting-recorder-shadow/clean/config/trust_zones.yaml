@@ -1,0 +1,7 @@
+rules: []
+agent_inventory_coverage: complete
+authorized_agents:
+  - pattern: "agent://minutes-recorder"
+    description: "Security-reviewed meeting recorder"
+agent_identity_authorities:
+  - "meeting-platform-audit"

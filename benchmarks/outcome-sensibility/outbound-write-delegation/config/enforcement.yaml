@@ -1,0 +1,10 @@
+# Scope the local Protect rehearsal to the observed Medium/Confirmed mismatch.
+# This is a customer deployment threshold, not a new engine rule.
+defaults:
+  block_risk_at_least: medium
+  block_confidence_at_least: confirmed
+
+destinations: []
+crown_jewel_destinations: []
+boundaries: []
+exceptions: []

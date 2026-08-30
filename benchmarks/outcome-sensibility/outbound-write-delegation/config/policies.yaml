@@ -1,0 +1,13 @@
+# One existing invariant, isolated for this matched pair. The telemetry must
+# carry both a customer-declared delegation scope and the attempted action
+# scope; missing authority context is NotEvaluable, never silently Clear.
+rules: []
+action_scoped_rules: []
+enable_delegation_scope: true
+enable_composition_light: false
+enable_trusted_data_only: false
+enable_high_risk_resource_egress: false
+enable_own_data_carveout: false
+enable_authority_carveout: false
+enable_known_injection_protected_action: false
+enable_action_origin_protected_action: false

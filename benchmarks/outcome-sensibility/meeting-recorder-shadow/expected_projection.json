@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "measurement": "cli-report-only-meeting-recorder-shadow-matched-pair",
+  "unsafe": {
+    "mode": "advisory-only",
+    "status": "assessed",
+    "inventory_state": "complete",
+    "receipts_scanned": 2,
+    "agentic_receipts_seen": 2,
+    "named_agents_seen": 1,
+    "findings": [
+      {
+        "kind": "observed-inventory-mismatch",
+        "evidence_level": "observed",
+        "disposition": "review",
+        "authorization_state": "confirmed-unapproved",
+        "agent_resource": "agent://minutes-recorder",
+        "authorized_pattern": null,
+        "activity_count": 2,
+        "distinct_services": [
+          "meeting-platform-audit",
+          "transcript-vault-audit"
+        ],
+        "evidence_signals": [
+          "trusted agent-identity emitter observed this exact identity",
+          "customer inventory coverage is complete and contains no matching authorized pattern"
+        ],
+        "because": "A trusted telemetry source observed an agent identity that is absent from the customer's complete authorized-agent inventory.",
+        "missing_telemetry": []
+      }
+    ]
+  },
+  "clean": {
+    "mode": "advisory-only",
+    "status": "assessed",
+    "inventory_state": "complete",
+    "receipts_scanned": 3,
+    "agentic_receipts_seen": 3,
+    "named_agents_seen": 1,
+    "findings": []
+  },
+  "partial_control": {
+    "mode": "advisory-only",
+    "status": "assessed",
+    "inventory_state": "partial",
+    "receipts_scanned": 2,
+    "agentic_receipts_seen": 2,
+    "named_agents_seen": 1,
+    "findings": [
+      {
+        "kind": "untraced-named-agent-activity",
+        "evidence_level": "observed",
+        "disposition": "not-enough-evidence",
+        "authorization_state": "not-established",
+        "agent_resource": "agent://minutes-recorder",
+        "authorized_pattern": null,
+        "activity_count": 2,
+        "distinct_services": [
+          "meeting-platform-audit",
+          "transcript-vault-audit"
+        ],
+        "evidence_signals": [
+          "downstream service telemetry carried the same explicit agent identity",
+          "no corresponding agent root was reachable through exported parent edges"
+        ],
+        "because": "Downstream service telemetry names an agent, but the retained graph does not contain the invocation/root lineage needed to explain that activity.",
+        "missing_telemetry": [
+          "complete authorized-agent inventory coverage",
+          "the corresponding agent invocation/root span"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "repository-authored synthetic telemetry; not a third-party incident record",
+    "the meeting-platform-audit identity authority is a customer configuration assertion whose authenticated ingest binding is not proven by this fixture",
+    "complete inventory is a customer declaration whose freshness and estate scope are not independently proven",
+    "consent, notice, meeting sensitivity, and retention attributes are scenario context only; the current shadow-activity projection does not evaluate their legal sufficiency or policy compliance",
+    "the shadow-activity projection is report-only and does not change a signed verdict, hold, block, or prevention decision"
+  ]
+}

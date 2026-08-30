@@ -1,0 +1,19 @@
+# Two independent checks for the matched pair. The authority carve-out verifies
+# that the action cites active DEAL20 in both arms. Delegation scope separately
+# compares the exact quote scope with the exported approval grant.
+rules:
+  - id: untrusted-influence-on-privileged-action
+    name: Approved sources must not turn prospect input into unauthorized terms
+    from_zones: [untrusted-external, privileged-pii]
+    to_zone: privileged-action
+    enforce: true
+
+action_scoped_rules: []
+enable_delegation_scope: true
+enable_composition_light: false
+enable_trusted_data_only: false
+enable_high_risk_resource_egress: false
+enable_own_data_carveout: false
+enable_authority_carveout: true
+enable_known_injection_protected_action: false
+enable_action_origin_protected_action: false

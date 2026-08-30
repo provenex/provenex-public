@@ -1,0 +1,18 @@
+# This bundle intentionally enables only the paired, chain-level invariant.
+# An external share is reviewable only when BOTH a customer-classified stale
+# recap and confidential meeting notes occur in its retained lineage.
+enable_delegation_scope: false
+enable_composition_light: false
+enable_trusted_data_only: false
+enable_high_risk_resource_egress: false
+enable_own_data_carveout: false
+enable_authority_carveout: false
+enable_known_injection_protected_action: false
+enable_action_origin_protected_action: false
+action_scoped_rules: []
+
+rules:
+  - name: "Superseded recap guidance must not drive a confidential meeting share"
+    id: stale-recap-private-meeting-share
+    from_zones: [untrusted-external, privileged-pii]
+    to_zone: external-egress
