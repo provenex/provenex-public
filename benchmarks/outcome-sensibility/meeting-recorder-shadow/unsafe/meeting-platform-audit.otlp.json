@@ -1,0 +1,62 @@
+{
+  "_scenario": "Synthetic forgotten or bot-free meeting recorder. A resource-stamped meeting audit service explicitly observes minutes-recorder joining a confidential review and writing its transcript, but no recorder root is exported and the customer's complete inventory declares that no agents are authorized.",
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "meeting-platform-audit" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "spans": [
+            {
+              "traceId": "82000000000000000000000000000082",
+              "spanId": "8200000000000001",
+              "name": "meeting participant joined",
+              "startTimeUnixNano": "1787850000000000000",
+              "attributes": [
+                { "key": "gen_ai.operation.name", "value": { "stringValue": "execute_tool" } },
+                { "key": "gen_ai.tool.name", "value": { "stringValue": "join_meeting" } },
+                { "key": "gen_ai.agent.name", "value": { "stringValue": "minutes-recorder" } },
+                { "key": "url.full", "value": { "stringValue": "https://meet.example.invalid/v1/meetings/risk-review/participants" } },
+                { "key": "meeting.id", "value": { "stringValue": "risk-review" } },
+                { "key": "meeting.classification", "value": { "stringValue": "confidential" } },
+                { "key": "meeting.recorder.visible_participant", "value": { "stringValue": "false" } },
+                { "key": "meeting.consent_notice", "value": { "stringValue": "not-observed" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "transcript-vault-audit" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "spans": [
+            {
+              "traceId": "82000000000000000000000000000082",
+              "spanId": "8200000000000002",
+              "parentSpanId": "8200000000000001",
+              "name": "write meeting transcript",
+              "startTimeUnixNano": "1787850060000000000",
+              "attributes": [
+                { "key": "gen_ai.operation.name", "value": { "stringValue": "execute_tool" } },
+                { "key": "gen_ai.tool.name", "value": { "stringValue": "write_transcript" } },
+                { "key": "gen_ai.agent.name", "value": { "stringValue": "minutes-recorder" } },
+                { "key": "url.full", "value": { "stringValue": "https://transcripts.example.invalid/v1/meetings/risk-review" } },
+                { "key": "meeting.id", "value": { "stringValue": "risk-review" } },
+                { "key": "meeting.transcript.retention_days", "value": { "stringValue": "365" } }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

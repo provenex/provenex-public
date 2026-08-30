@@ -1,0 +1,9 @@
+rules: []
+agent_inventory_coverage: complete
+authorized_agents:
+  - pattern: "agent://settlement-orchestrator"
+    description: "Finance-owned production settlement orchestrator"
+  - pattern: "agent://payout-rounder"
+    description: "Finance-owned payout rounding worker"
+agent_identity_authorities:
+  - "agent-control-plane"

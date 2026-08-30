@@ -1,0 +1,142 @@
+{
+  "claim_boundary": [
+    "Repository-authored synthetic telemetry; this is a deterministic mechanism test, not a production prevalence or fraud-rate measurement.",
+    "Settlements are controller-stamped observations in OTLP; the fixture does not prove bank ownership, fraud, recovery, or customer loss.",
+    "The aggregate is report-only. It does not rewrite, re-sign, or block any per-action policy outcome.",
+    "The public repository contains the generator and frozen result, but not the private Provenex engine or test harness needed to independently rerun the assessment."
+  ],
+  "fixture_generation": {
+    "fixtures": {
+      "unsafe": {
+        "bytes": 1327837,
+        "file": "penny-river-unsafe.otlp.json",
+        "sha256": "b4eefa56a318912974f5f23bfdfa2c4acf77436b4e691e13dc32ce6939a79da2",
+        "target_verified": false
+      },
+      "verified": {
+        "bytes": 1326817,
+        "file": "penny-river-verified.otlp.json",
+        "sha256": "ad7e1e63a339e744fd1d8c105e4d35d03db3e50af0ccc48f950c4f3f9f12013b",
+        "target_verified": true
+      }
+    },
+    "generator": "generate_fixtures.py",
+    "matched_attribute_occurrences_per_arm": 1020,
+    "matched_difference": "Only provenex.action.context.target.verified differs between arms.",
+    "measurement": "synthetic-settled-convergence-matched-twin",
+    "normalized_shape_sha256": "8e69e4f076168b09fa51a95a69aeb94e3bf8748c726407514851f346c1f165a0",
+    "scale": {
+      "amount_each": "0.01",
+      "currency": "USD",
+      "duplicate_deliveries": 10,
+      "expected_unique_total": "10.00",
+      "registered_actions_per_arm": 1020,
+      "settlement_receipts_sampled_per_arm": 1010,
+      "stated_only_attempts": 10,
+      "unique_settlements": 1000
+    },
+    "schema_version": 1
+  },
+  "measurement": "synthetic-settled-convergence-matched-twin",
+  "privacy": {
+    "evidence_receipt_ids_capped_at": 20,
+    "raw_destination_in_report": false,
+    "raw_obligation_in_report": false
+  },
+  "provenex": {
+    "authority": "advisory-only",
+    "engine_source_commit": "aaf195784c538e2ab839dc4aa48a134ec6a33c3a",
+    "per_action_policy": {
+      "action_class": "financial-commitment",
+      "currency": "USD",
+      "id": "penny-river-per-action-limit",
+      "kind": "amount-limit",
+      "limit": "1.00"
+    },
+    "test": "cargo test --test penny_river_flagship -- --nocapture"
+  },
+  "results": {
+    "clean_verified_destination": {
+      "advisory_findings": 0,
+      "dropped_groups": 0,
+      "dropped_receipts": 0,
+      "excluded_conflicting_replay_ids": 0,
+      "excluded_stated_only_actions": 10,
+      "group": {
+        "action_count_after_replay_dedupe": 1000,
+        "base_other_count": 0,
+        "base_policy_cleared_count": 1000,
+        "base_red_count": 0,
+        "cohort_action_count": 1000,
+        "cohort_distinct_destination_count": 1,
+        "cohort_scope_complete": true,
+        "context_identity_basis": "stamped-obligation",
+        "currency": "USD",
+        "destination_share_basis_points": 10000,
+        "disposition": "expected",
+        "distinct_contexts": 1000,
+        "distinct_obligations": 1000,
+        "distinct_traces": 1000,
+        "evidence_receipt_ids_in_report": 20,
+        "evidence_receipt_ids_truncated": 980,
+        "maximum_amount": "0.01",
+        "minimum_amount": "0.01",
+        "reasons": [
+          "destination-convergence",
+          "destination-verified"
+        ],
+        "target_unverified_count": 0,
+        "target_verified_count": 1000,
+        "total_amount": "10.00"
+      },
+      "projection_mode": "advisory-only",
+      "projection_status": "assessed",
+      "registered_financial_actions": 1020,
+      "sampled_settlement_receipts": 1010,
+      "settlement_confirmed_actions": 1010
+    },
+    "signed_assessments_per_arm": 1000,
+    "signed_decision_semantics_equal": true,
+    "unsafe_unverified_destination": {
+      "advisory_findings": 1,
+      "dropped_groups": 0,
+      "dropped_receipts": 0,
+      "excluded_conflicting_replay_ids": 0,
+      "excluded_stated_only_actions": 10,
+      "group": {
+        "action_count_after_replay_dedupe": 1000,
+        "base_other_count": 0,
+        "base_policy_cleared_count": 1000,
+        "base_red_count": 0,
+        "cohort_action_count": 1000,
+        "cohort_distinct_destination_count": 1,
+        "cohort_scope_complete": true,
+        "context_identity_basis": "stamped-obligation",
+        "currency": "USD",
+        "destination_share_basis_points": 10000,
+        "disposition": "review",
+        "distinct_contexts": 1000,
+        "distinct_obligations": 1000,
+        "distinct_traces": 1000,
+        "evidence_receipt_ids_in_report": 20,
+        "evidence_receipt_ids_truncated": 980,
+        "maximum_amount": "0.01",
+        "minimum_amount": "0.01",
+        "reasons": [
+          "destination-convergence",
+          "target-explicitly-unverified"
+        ],
+        "target_unverified_count": 1000,
+        "target_verified_count": 0,
+        "total_amount": "10.00"
+      },
+      "projection_mode": "advisory-only",
+      "projection_status": "assessed",
+      "registered_financial_actions": 1020,
+      "sampled_settlement_receipts": 1010,
+      "settlement_confirmed_actions": 1010
+    }
+  },
+  "schema_version": 1,
+  "validated_at": "2026-08-28"
+}

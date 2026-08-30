@@ -1,0 +1,26 @@
+# Synthetic local rehearsal. The fixed `.invalid` URI is the logical outbound
+# write boundary; the demo PEP forwards allowed attempts only to an ephemeral
+# loopback sink that is never used as policy identity.
+rules:
+  - pattern: https://outbound-write.sandbox.invalid/*
+    zone: external-egress
+  - pattern: delegation://customer-declared/*
+    zone: internal
+  - pattern: agent://*
+    zone: internal
+  - pattern: tool://run_outbound_workflow*
+    zone: internal
+  - pattern: tool://*
+    zone: internal
+  - pattern: model://*
+    zone: internal
+  - pattern: prompt://*
+    zone: internal
+
+tool_actions:
+  - pattern: tool://run_outbound_workflow*
+    class: internal-lookup
+  - pattern: tool://publish_outbound_message*
+    class: egress
+
+destination_allowlist: []

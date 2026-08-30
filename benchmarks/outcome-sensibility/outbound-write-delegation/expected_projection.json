@@ -1,0 +1,70 @@
+{
+  "clean": {
+    "actions": [
+      {
+        "binding_reason": null,
+        "confidence": "confirmed",
+        "delegation_scope_evaluable": true,
+        "destination": "https://outbound-write.sandbox.invalid/publish",
+        "fired_policies": [],
+        "risk": "unknown",
+        "verdict": "not-covered"
+      }
+    ],
+    "assessed_actions": 1,
+    "red_actions": 0
+  },
+  "engine_boundary": "Watch evidence is post-action; live pre-write enforcement is tested separately against the signed production checkpoint",
+  "files": {
+    "clean_trace": {
+      "path": "clean_twin_trace.otlp.json",
+      "sha256": "1181b1f78db1d63521f9852b5c143f7e2927739aecfd7c3a79eeb7dcdd298b36"
+    },
+    "enforcement_config": {
+      "path": "config/enforcement.yaml",
+      "sha256": "3550ea9f947a3100b6f0e60f72df3ee394476af151c3244ad9f5d8af3fa81799"
+    },
+    "policy_config": {
+      "path": "config/policies.yaml",
+      "sha256": "5375fa230eae874975076ce9100a8f53629b383bd1cdda3bdf67df99d6bab8dd"
+    },
+    "protect_intent": {
+      "path": "protect_intent.otlp.json",
+      "sha256": "5ec9fb2594c0dbc76dfb4ceffc10e11652b210a89c8eeff548a2ca36567d308c"
+    },
+    "trust_config": {
+      "path": "config/trust_zones.yaml",
+      "sha256": "f62efe0cb1bc27db7ce6b2dc254e68373b60f11a66f275f097f854df2b2a7501"
+    },
+    "unsafe_trace": {
+      "path": "unsafe_trace.otlp.json",
+      "sha256": "6d8e824cbdf7faa09bc3703dac19b2936005f2bf62ec0485e99f5eb3fb582315"
+    }
+  },
+  "limitations": [
+    "repository-authored synthetic telemetry and controlled loopback destination",
+    "delegation is customer-declared observed context, not signed authority",
+    "provider names in the README are normalization examples, not integrations",
+    "zero Red findings in the clean observed twin is not proof of absence",
+    "no third-party API call, provider incident, frequency, recall, or false-positive claim"
+  ],
+  "measurement": "production-cli-retrospective-outbound-write-delegation-matched-pair",
+  "schema_version": 1,
+  "unsafe": {
+    "actions": [
+      {
+        "binding_reason": "delegation-scope-mismatch",
+        "confidence": "confirmed",
+        "delegation_scope_evaluable": true,
+        "destination": "https://outbound-write.sandbox.invalid/publish",
+        "fired_policies": [
+          "delegation-scope-mismatch"
+        ],
+        "risk": "medium",
+        "verdict": "red"
+      }
+    ],
+    "assessed_actions": 1,
+    "red_actions": 1
+  }
+}

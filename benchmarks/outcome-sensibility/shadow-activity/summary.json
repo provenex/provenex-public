@@ -1,0 +1,102 @@
+{
+  "clean": {
+    "agentic_receipts_seen": 4,
+    "ancestor_walks_truncated": 0,
+    "duplicate_receipt_ids": 0,
+    "evaluated_at": "2026-08-28T12:00:00Z",
+    "excluded_future_timestamps": 0,
+    "excluded_synthesized_receipts": 0,
+    "findings": [],
+    "findings_truncated": 0,
+    "inventory_config_digest": "70eba6cf0b1816fb2bc051a277decfe22441f4e117c6d4c4f8b3e6169cdd556f",
+    "inventory_state": "complete",
+    "limitations": [
+      "This projection reports hypotheses and inventory mismatches; it never creates a topology node for an inferred actor and never changes a signed verdict.",
+      "Missing parent/delegation telemetry means authorization is not established, not that authorization was disproved.",
+      "Generic agent identity attributes are self-authored claims unless an explicit identity is emitted by a resource-stamped service configured as an agent_identity_authority.",
+      "Inventory completeness reflects the loaded customer configuration snapshot and digest; Provenex does not independently prove external inventory freshness or estate scope."
+    ],
+    "mode": "advisory-only",
+    "named_agents_seen": 2,
+    "receipts_scanned": 5,
+    "schema_version": 1,
+    "status": "assessed"
+  },
+  "engine_boundary": "advisory-only; no verdict, hold, block, or prevention claim",
+  "engine_source_commit": "aaf195784c538e2ab839dc4aa48a134ec6a33c3a",
+  "evaluated_at": "2026-08-28T12:00:00Z",
+  "files": {
+    "clean_inventory": {
+      "path": "clean_inventory.yaml",
+      "sha256": "0d0854b0823ee2d919ff75b90a172e719ccee44858bea74670da965df04ae6fe"
+    },
+    "clean_trace": {
+      "path": "clean_twin_trace.otlp.json",
+      "sha256": "447fa226c47183af232efade6473514fcbea35aa8351e2bbccb1f71127f88e71"
+    },
+    "unsafe_inventory": {
+      "path": "unsafe_inventory.yaml",
+      "sha256": "de97c98f93368a6d6dd73302470f0813f17aa6b7043346c4448cfe8cf2509900"
+    },
+    "unsafe_trace": {
+      "path": "unsafe_trace.otlp.json",
+      "sha256": "1f6642b186726a7813f16c543ca9ec8ac637a2b596394b0d9ce4465ea32d7f8d"
+    }
+  },
+  "limitations": [
+    "repository-authored synthetic telemetry",
+    "complete inventory is a customer declaration whose freshness and estate scope are not independently proven",
+    "zero findings in the clean observed snapshot is not proof of absence",
+    "no real-world frequency, recall, incumbent-comparison, or prevention claim"
+  ],
+  "measurement": "offline-report-only-shadow-activity-matched-pair",
+  "schema_version": 1,
+  "unsafe": {
+    "agentic_receipts_seen": 4,
+    "ancestor_walks_truncated": 0,
+    "duplicate_receipt_ids": 0,
+    "evaluated_at": "2026-08-28T12:00:00Z",
+    "excluded_future_timestamps": 0,
+    "excluded_synthesized_receipts": 0,
+    "findings": [
+      {
+        "activity_count": 2,
+        "agent_resource": "agent://payout-rounder",
+        "authorization_state": "confirmed-unapproved",
+        "because": "A trusted lifecycle trace produced a child identity absent from the complete authorized-agent inventory; no delegation evidence was observed on that path.",
+        "disposition": "review",
+        "distinct_services": [
+          "agent-control-plane"
+        ],
+        "evidence_level": "observed",
+        "evidence_receipt_ids": [
+          "71000000000000000000000000000071:7100000000000002",
+          "71000000000000000000000000000071:7100000000000003"
+        ],
+        "evidence_receipts_truncated": 0,
+        "evidence_signals": [
+          "agent lifecycle action `spawn_agent` is reachable through explicit, non-stitched parent edges from the child identity",
+          "no child-bound delegation edge or directly linked grant receipt was observed"
+        ],
+        "finding_id": "shadow-activity:2d79d127f85b32442500dbd4",
+        "first_observed_at": "2026-08-20T10:00:01Z",
+        "kind": "spawn-or-launch-authorization-not-established",
+        "last_observed_at": "2026-08-20T10:00:02Z"
+      }
+    ],
+    "findings_truncated": 0,
+    "inventory_config_digest": "4e5753fd7902d71ce41d73ca1be59efdd36ed2f0402df6a514812606a6bcb769",
+    "inventory_state": "complete",
+    "limitations": [
+      "This projection reports hypotheses and inventory mismatches; it never creates a topology node for an inferred actor and never changes a signed verdict.",
+      "Missing parent/delegation telemetry means authorization is not established, not that authorization was disproved.",
+      "Generic agent identity attributes are self-authored claims unless an explicit identity is emitted by a resource-stamped service configured as an agent_identity_authority.",
+      "Inventory completeness reflects the loaded customer configuration snapshot and digest; Provenex does not independently prove external inventory freshness or estate scope."
+    ],
+    "mode": "advisory-only",
+    "named_agents_seen": 2,
+    "receipts_scanned": 4,
+    "schema_version": 1,
+    "status": "assessed"
+  }
+}

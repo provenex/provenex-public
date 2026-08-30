@@ -1,0 +1,67 @@
+{
+  "clean": {
+    "actions": [
+      {
+        "binding_reason": null,
+        "destination": "tool://apply_quote_discount",
+        "evaluable_policies": [
+          "delegation-scope-mismatch",
+          "untrusted-influence-on-privileged-action"
+        ],
+        "fired_policies": [],
+        "verdict": "policy-cleared"
+      }
+    ],
+    "assessed_actions": 1,
+    "red_actions": 0
+  },
+  "engine_boundary": "retrospective verdict evidence; no live hold, block, prevention, or third-party incident claim",
+  "files": {
+    "clean_trace": {
+      "path": "clean_twin_trace.otlp.json",
+      "sha256": "7fdda704effbc541328dc6a23b81f6405bb460d751d6ef5a221f8edd23052fb0"
+    },
+    "policy_config": {
+      "path": "config/policies.yaml",
+      "sha256": "a5ce4c74a2b2bdab26c96a8ec0b387fe2dffdd80c46689da5ad3a01324c6a8d4"
+    },
+    "trust_config": {
+      "path": "config/trust_zones.yaml",
+      "sha256": "15ee609646e15878ae5fa2831d85d823d05ee53a74e10ef6b6234a7a0138f5c0"
+    },
+    "unsafe_trace": {
+      "path": "unsafe_trace.otlp.json",
+      "sha256": "a9ad25af253647b7c64e6973c4622f87357793f6893e64ce505c980bf6e68191"
+    }
+  },
+  "limitations": [
+    "repository-authored synthetic telemetry",
+    "customer-authored classifications, explicit action scope, and exported grant scope are inputs to the result",
+    "the active pricing-rule check and the delegated approval-scope check are separate evaluated policies",
+    "the engine does not infer conditional language, CRM allowlist membership, or business approval from prose",
+    "scope equality does not independently verify the account, term, discount, SOP, or approval-record authenticity",
+    "the unsafe finding proves an observed scope mismatch, not the absence of an unobserved approval",
+    "zero Red findings in the clean observed twin is not proof of absence",
+    "no real-world frequency, recall, incumbent-comparison, or prevention claim"
+  ],
+  "measurement": "production-cli-retrospective-active-rule-and-delegated-approval-scope-matched-pair",
+  "schema_version": 2,
+  "unsafe": {
+    "actions": [
+      {
+        "binding_reason": "delegation-scope-mismatch",
+        "destination": "tool://apply_quote_discount",
+        "evaluable_policies": [
+          "delegation-scope-mismatch",
+          "untrusted-influence-on-privileged-action"
+        ],
+        "fired_policies": [
+          "delegation-scope-mismatch"
+        ],
+        "verdict": "red"
+      }
+    ],
+    "assessed_actions": 1,
+    "red_actions": 1
+  }
+}

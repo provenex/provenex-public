@@ -1,0 +1,7 @@
+rules: []
+agent_inventory_coverage: complete
+authorized_agents:
+  - pattern: "agent://settlement-orchestrator"
+    description: "Finance-owned production settlement orchestrator"
+agent_identity_authorities:
+  - "agent-control-plane"

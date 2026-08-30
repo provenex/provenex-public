@@ -1,0 +1,5 @@
+rules: []
+agent_inventory_coverage: partial
+authorized_agents: []
+agent_identity_authorities:
+  - "meeting-platform-audit"

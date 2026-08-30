@@ -1,0 +1,42 @@
+# Synthetic approved-source sandbox. These classifications preserve the
+# external origin of a prospect's words after an approved meeting app saves
+# them into CRM. Provenex does not infer those semantics from arbitrary text.
+rules:
+  - pattern: meeting-platform://approved-notetaker/*
+    zone: untrusted-external
+  - pattern: crm://opportunities/*
+    zone: privileged-pii
+  - pattern: pricing://discount-rules/*
+    zone: internal
+  - pattern: approval://discounts/*
+    zone: internal
+  - pattern: tool://apply_quote_discount*
+    zone: privileged-action
+  - pattern: tool://capture_approved_meeting*
+    zone: internal
+  - pattern: tool://save_meeting_summary_to_crm*
+    zone: internal
+  - pattern: tool://read_approved_crm_opportunity*
+    zone: privileged-pii
+  - pattern: tool://lookup_current_discount_rule*
+    zone: internal
+  - pattern: agent://*
+    zone: internal
+  - pattern: model://*
+    zone: internal
+  - pattern: prompt://*
+    zone: internal
+  - pattern: tool://*
+    zone: internal
+
+tool_actions:
+  - pattern: tool://capture_approved_meeting*
+    class: external-read
+  - pattern: tool://read_approved_crm_opportunity*
+    class: external-read
+  - pattern: tool://lookup_current_discount_rule*
+    class: internal-lookup
+  - pattern: tool://apply_quote_discount*
+    class: protected-action
+
+destination_allowlist: []

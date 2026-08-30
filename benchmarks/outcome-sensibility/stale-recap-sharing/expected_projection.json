@@ -1,0 +1,220 @@
+{
+  "claim_boundary": [
+    "repository-authored synthetic telemetry; not a third-party incident record",
+    "recap currentness is a customer-authored URI classification and scoped policy input; the fixture does not show Provenex inferring native SaaS version semantics from generic logs",
+    "the production CLI result is a signed retrospective assessment; this fixture does not show a live hold, block, prevented send, or model call",
+    "the frozen verdict's weakest lineage-evidence grade is metadata-proximity; not every reconstructed edge is claimed as directly observed",
+    "the public bundle includes telemetry, config, and a frozen minimized projection, but the private Provenex engine is required to rerun the assessment",
+    "one matched pair does not measure production prevalence, recall, or false-positive rate"
+  ],
+  "clean_customer_classified_current_recap": {
+    "actions": [
+      {
+        "binding_reason": null,
+        "closure": {
+          "edges": [
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000001",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000002"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000001",
+              "kind": "retrieval",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000002",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000003"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000002",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000003",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000003",
+              "kind": "retrieval",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000004",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000005"
+            }
+          ],
+          "nodes": [
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000001",
+              "kind": "intermediate",
+              "resource": "meeting://tenant-a/board/recaps/2026-08-18/v2-current",
+              "trust_zone": "internal"
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000002",
+              "kind": "intermediate",
+              "resource": "agent://meeting-notes-assistant",
+              "trust_zone": null
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000003",
+              "kind": "intermediate",
+              "resource": "meeting://tenant-a/board/transcripts/2026-08-18",
+              "trust_zone": "privileged-pii"
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000004",
+              "kind": "intermediate",
+              "resource": "model://unknown/example-meeting-model",
+              "trust_zone": null
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000005",
+              "kind": "intermediate",
+              "resource": "https://graph.microsoft.com/v1.0/users/meeting-assistant/sendMail",
+              "trust_zone": "external-egress"
+            }
+          ]
+        },
+        "closure_complete": true,
+        "confidence": "confirmed",
+        "destination": "https://graph.microsoft.com/v1.0/users/meeting-assistant/sendMail",
+        "fired_policies": [],
+        "lineage_evidence": "metadata-proximity",
+        "output_receipt_id": "a110ca7e000000000000000000000001:a110000000000005",
+        "risk": "low",
+        "verdict": "policy-cleared"
+      }
+    ],
+    "assessed_external_actions": 1,
+    "red_actions": 0
+  },
+  "files": {
+    "clean_trace": {
+      "path": "clean_twin_trace.otlp.json",
+      "sha256": "3f79256fed67470929039046a4aa8c11969ce90d15bb6b484de04a29b918d319"
+    },
+    "policy_config": {
+      "path": "config/policies.yaml",
+      "sha256": "422717764d6f8eed593d2eb2080c81a2f45e6969c76d61e0db8f118cd9764456"
+    },
+    "trust_config": {
+      "path": "config/trust_zones.yaml",
+      "sha256": "75dec18aebb1a68527140e4fb7bb4d153dfc6d4c1c9622d014c13a6d5fef1970"
+    },
+    "unsafe_trace": {
+      "path": "unsafe_trace.otlp.json",
+      "sha256": "6a02b83aab882c6b71cf7d2a2517a5b3b47b4fafd16b586a7a04ae583584f2b9"
+    }
+  },
+  "fixture_shape_per_arm": {
+    "cross_service_spans": 5,
+    "external_actions": 1,
+    "services": 4
+  },
+  "measurement": "production-cli-retrospective-stale-recap-sharing-matched-pair",
+  "provenex": {
+    "engine_source_commit": "eb2c7077ff59e1ec6cdc7e37c171d6cb01cec910",
+    "evaluation_mode": "stored-closure-retrospective",
+    "reproduction_test": "cargo test --test stale_recap_sharing_cli -- --nocapture",
+    "scoped_policy_id": "stale-recap-private-meeting-share"
+  },
+  "schema_version": 1,
+  "unsafe_customer_classified_superseded_recap": {
+    "actions": [
+      {
+        "binding_reason": "stale-recap-private-meeting-share",
+        "closure": {
+          "edges": [
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000001",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000002"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000001",
+              "kind": "retrieval",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000002",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000003"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000002",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000003",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000003",
+              "kind": "retrieval",
+              "to": "a110ca7e000000000000000000000001:a110000000000004"
+            },
+            {
+              "from": "a110ca7e000000000000000000000001:a110000000000004",
+              "kind": "influence",
+              "to": "a110ca7e000000000000000000000001:a110000000000005"
+            }
+          ],
+          "nodes": [
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000001",
+              "kind": "intermediate",
+              "resource": "meeting://tenant-a/board/recaps/2026-08-18/v1-superseded",
+              "trust_zone": "untrusted-external"
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000002",
+              "kind": "intermediate",
+              "resource": "agent://meeting-notes-assistant",
+              "trust_zone": null
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000003",
+              "kind": "intermediate",
+              "resource": "meeting://tenant-a/board/transcripts/2026-08-18",
+              "trust_zone": "privileged-pii"
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000004",
+              "kind": "intermediate",
+              "resource": "model://unknown/example-meeting-model",
+              "trust_zone": null
+            },
+            {
+              "id": "a110ca7e000000000000000000000001:a110000000000005",
+              "kind": "intermediate",
+              "resource": "https://graph.microsoft.com/v1.0/users/meeting-assistant/sendMail",
+              "trust_zone": "external-egress"
+            }
+          ]
+        },
+        "closure_complete": true,
+        "confidence": "confirmed",
+        "destination": "https://graph.microsoft.com/v1.0/users/meeting-assistant/sendMail",
+        "fired_policies": [
+          "stale-recap-private-meeting-share"
+        ],
+        "lineage_evidence": "metadata-proximity",
+        "output_receipt_id": "a110ca7e000000000000000000000001:a110000000000005",
+        "risk": "high",
+        "verdict": "red"
+      }
+    ],
+    "assessed_external_actions": 1,
+    "red_actions": 1
+  },
+  "validated_at": "2026-08-29"
+}

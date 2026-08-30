@@ -1,0 +1,41 @@
+# Synthetic meeting-assistant demo, customer-declared trust zones.
+#
+# "Superseded" is not a universal property of meeting software telemetry.
+# This narrow URI classification represents a customer's own knowledge-currentness
+# invariant for one recap collection. Provenex does not infer it from document text.
+egress_default_policy: untrusted-when-not-internal
+
+rules:
+  - pattern: "meeting://tenant-a/board/recaps/2026-08-18/v1-superseded"
+    zone: untrusted-external
+  - pattern: "meeting://tenant-a/board/recaps/2026-08-18/v2-current"
+    zone: internal
+  - pattern: "meeting://tenant-a/board/transcripts/2026-08-18"
+    zone: privileged-pii
+  - pattern: "tool://retrieve_meeting_recap*"
+    zone: internal
+  - pattern: "tool://read_confidential_meeting_notes*"
+    zone: privileged-pii
+  - pattern: "tool://send_meeting_recap*"
+    zone: external-egress
+  - pattern: "https://graph.microsoft.com/*"
+    zone: external-egress
+  - pattern: "model://*"
+    zone: internal
+  - pattern: "agent://*"
+    zone: internal
+  - pattern: "tool://*"
+    zone: internal
+  - pattern: "prompt://*"
+    zone: internal
+
+tool_actions:
+  - pattern: "tool://retrieve_meeting_recap*"
+    class: internal-lookup
+  - pattern: "tool://read_confidential_meeting_notes*"
+    class: internal-lookup
+  - pattern: "tool://send_meeting_recap*"
+    class: egress
+
+destination_allowlist: []
+idp_app_catalog: []
