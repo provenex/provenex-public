@@ -2,7 +2,7 @@ import path from 'node:path';
 import { UsageError } from './errors.mjs';
 import { EXCLUDE_LIMITS, SERVER_LIMITS } from './limits.mjs';
 
-export const VERSION = '0.1.0-alpha.6';
+export const VERSION = '0.1.0-alpha.7';
 
 export const REQUEST_TIMEOUT = Object.freeze({
   defaultSeconds: 30 * 60,

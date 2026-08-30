@@ -314,6 +314,14 @@ claim that absence on a later run verified a fix. `verification_family` is an
 opaque detector-family identity reserved for conservative comparisons. Display
 ids such as `finding-0001` remain ordinal and are never verification identities.
 
+When a validated report contains a finding with that supported structural
+identity, Check prints one evidence-bounded, paste-ready fix prompt for Cursor,
+Claude, Codex, or another coding agent. The same prompt appears in an optional
+local HTML report, so the owner can act before signing in to the Provenex App.
+Check does not invent a prompt for findings without a supported verification
+key. Report-derived text is serialized inside an explicitly untrusted data
+block; the coding-agent safety instructions appear before that block.
+
 ## Re-run verification
 
 After making a change, compare a new `scan` with an owner-only JSON report from
