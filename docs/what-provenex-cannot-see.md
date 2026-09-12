@@ -29,6 +29,12 @@ credential-shaped access, and available token counters. They cannot establish
 activity missing from the export, deleted provider state, browser history,
 cookie state, or server-side account history.
 
+When a structured tool call names a submitted scan-relative file, the hosted
+check can join that path identity. The join does not establish authorship,
+review, or that the current bytes were produced by the tool. Unmatched session
+paths stay unjoined. Glob, search, and shell tools are not treated as path
+joins.
+
 Project attribution depends on the supported record carrying the required
 working-directory metadata. Web conversation exports do not provide reliable
 project attribution and are reported accordingly.

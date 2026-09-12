@@ -21,6 +21,7 @@ const EXPECTED_FILES = [
   'src/explain.mjs',
   'src/excludes.mjs',
   'src/fix-prompt.mjs',
+  'src/fs-policy.mjs',
   'src/git.mjs',
   'src/limits.mjs',
   'src/main.mjs',
@@ -32,6 +33,7 @@ const EXPECTED_FILES = [
   'src/report.mjs',
   'src/verification.mjs',
   'types/checkpoint.d.ts',
+  'skills/provenex-check/SKILL.md',
 ].sort();
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';

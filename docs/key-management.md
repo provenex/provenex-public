@@ -11,7 +11,9 @@ only from:
 
 - `PROVENEX_API_KEY`; or
 - `~/.config/provenex/check.json`, when the file is regular, owner-controlled,
-  and mode `0600`.
+  and mode `0600` on Unix. On Windows the same path is accepted only when
+  `icacls` shows no Users, Everyone, or Authenticated Users access. GitHub
+  Actions and other non-interactive hosts should prefer `PROVENEX_API_KEY`.
 
 The CLI does not accept a production API key as a command-line value. It pins
 production requests to `https://api.provenex.ai`; an option or environment
@@ -41,7 +43,7 @@ material, private rule identifiers, or internal analysis structures.
 
 ## Local report files
 
-JSON and HTML reports are optional local copies. The CLI creates them
+JSON, HTML, and Markdown reports are optional local copies. The CLI creates them
 owner-only, outside the scanned project, and does not replace an existing file
 unless `--force` is explicit. Symlink outputs are rejected.
 

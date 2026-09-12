@@ -6,6 +6,13 @@
   analysis, evidence inputs, reports, and re-runs.
 - [CLI reference](../cli/provenex-check/README.md): exact commands, bounds,
   exclusions, prompts, and response validation.
+- [Coding-agent skill](../cli/provenex-check/skills/provenex-check/SKILL.md):
+  run `plan` and `--dry-run` from Cursor, Claude, or Codex without uploading.
+- [AGENTS.md](../AGENTS.md): the same consent-first path for coding agents.
+- [GitHub Action](../.github/actions/provenex-check/action.yml): CI dry-run
+  (not a merge all-clear).
+- [Contributing](../CONTRIBUTING.md): tests, pack boundary, and release tags.
+- [Changelog](../CHANGELOG.md): public CLI changes.
 - [Product contract](provenex-check.md): public result and product boundary.
 - [Data policy](provenex-check-data-policy.md): versioned hosted processing and
   retention contract.

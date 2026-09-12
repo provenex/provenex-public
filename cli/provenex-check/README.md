@@ -17,8 +17,15 @@ telemetry, prints the exact upload origin and a byte/category preflight, asks
 for consent, and calls `POST /v1/check/runs`. The service returns a strict,
 bounded public report DTO in an ephemeral per-run signature envelope. The CLI
 validates that DTO, its exact applied data policy, its canonical bytes, and its
-Ed25519 self-consistency signature before rendering terminal or HTML views
-locally. Server-rendered views and private engine fields are rejected.
+Ed25519 self-consistency signature before rendering terminal, Markdown, or HTML
+views locally. Server-rendered views and private engine fields are rejected.
+
+`provenex-check --help` lists two jobs: local Check, and your App gateway.
+`provenex-check scan --help` lists collector flags. A coding-agent skill lives
+in [`skills/provenex-check/SKILL.md`](skills/provenex-check/SKILL.md). Copy it
+to `.cursor/skills/provenex-check/` or `.claude/skills/provenex-check/`. Codex
+and other agents can follow [`AGENTS.md`](../../AGENTS.md). The skill runs
+`plan` and `scan --dry-run` without uploading.
 
 ## Requirements and installation
 
@@ -63,29 +70,39 @@ provenex-check scan /path/to/project --dry-run
 ```
 
 Add `--list-files` to the dry run when you want every selected
-source-relative path instead of the compact default preflight.
+source-relative path instead of the compact default preflight. `plan` warns
+when eligible source files exceed the default 5,000-file scan cap, so a large
+tree can add `--exclude` or `--max-files` before a real scan fails closed.
+
+A GitHub Actions dry-run (not a merge all-clear) lives at
+`.github/actions/provenex-check`.
 
 On an interactive TTY, `scan` and `audit` first run bounded, metadata-only
-discovery under the well-known Claude Code and Codex session directories. The
-CLI reports `found`, `none`, or `unavailable`. When it finds exact-project
-matches, it asks once, with a default of yes, whether to include the full session
-files for an unjoined review alongside the project scan. This version does not
-yet connect a session action to a source path. Declining leaves every session
-out. The broader trace/export/audit-file catalog stays collapsed behind a
-separate, default-no “Add another evidence file?” question. Paths entered at
-that prompt are read inside the CLI; the CLI does not write them to shell
-history.
+discovery under the well-known Claude Code and Codex session directories, and
+under the Cursor `agent-transcripts` directory whose project slug encodes this
+canonical scan root. The CLI reports `found`, `none`, or `unavailable`. When it
+finds exact-project matches, it asks once, with a default of yes, whether to
+include the full session files alongside the project scan. Matching session tool
+paths can be joined to submitted files. Unmatched session actions stay unjoined.
+The join is path identity: it does not establish authorship, tool success, or
+human review. Declining leaves every session out. The broader
+trace/export/audit-file catalog stays collapsed behind a separate, default-no
+“Add another evidence file?” question.
+Unrecognized JSON at that prompt is not selected. Paths entered at that prompt
+are read inside the CLI; the CLI does not write them to shell history.
 
-Metadata discovery parses only the first complete JSONL record, bounded to 64
-KiB per candidate, and matches only when that record's provider-specific `cwd`
-equals the canonical scan root exactly. Malformed, missing, and over-limit
-first records are skipped. Only bytes through the first record count toward the
-32 MiB aggregate metadata budget. The preflight lists the included session
-count and bytes, never their filenames. Discovery never reads browser history,
-cookies, or authentication stores. Discovery fails closed rather than returning
-a partial selection if the combined Claude/Codex traversal would exceed 10,000
-directories, 100,000 directory entries, 20,000 candidate session files, or 32
-MiB of first-record metadata.
+Claude and Codex metadata discovery parses only the first complete JSONL record,
+bounded to 64 KiB per candidate, and matches only when that record's
+provider-specific `cwd` equals the canonical scan root exactly. Cursor matches
+by directory: every `.jsonl` under that project's `agent-transcripts` tree is an
+exact-project candidate; `state.vscdb` and browser login stores stay refused.
+Malformed, missing, and over-limit first records are skipped. Only bytes through
+the first Claude/Codex record count toward the 32 MiB aggregate metadata budget.
+The preflight lists the included session count and bytes, never their filenames.
+Discovery never reads browser history, cookies, or authentication stores.
+Discovery fails closed rather than returning a partial selection if the combined
+Claude/Codex/Cursor traversal would exceed 10,000 directories, 100,000 directory
+entries, 20,000 candidate session files, or 32 MiB of first-record metadata.
 
 Non-interactive runs, `--yes`, and `--no-prompt` do not perform this guided
 discovery and never include local AI history by themselves. Use
@@ -100,7 +117,8 @@ mkdir -m 700 "$HOME/provenex-reports"
 export PROVENEX_API_KEY='replace-with-your-key'
 provenex-check scan /path/to/project \
   --json "$HOME/provenex-reports/check.json" \
-  --html "$HOME/provenex-reports/check.html"
+  --html "$HOME/provenex-reports/check.html" \
+  --md "$HOME/provenex-reports/check.md"
 ```
 
 The CLI asks for interactive approval. On a TTY, `scan` and `audit` first
@@ -135,7 +153,7 @@ its response.
 The canonical home directory itself is not an eligible scan root; select a
 project subtree. Provenex, Codex, and Claude credential stores are always
 excluded when a broader eligible target contains them, including a custom
-`XDG_CONFIG_HOME`. Known Claude/Codex AI-history roots are pruned from generic
+`XDG_CONFIG_HOME`. Known Claude/Codex/Cursor AI-history roots are pruned from generic
 source traversal. The CLI does not display or upload those local paths. After
 approval and key loading, but before any request, it also rejects selected source
 or artifact content containing the exact active bearer or its JSON-escaped
@@ -164,18 +182,17 @@ provenex-check audit /path/to/project \
   --dependency-audit /path/to/npm-audit.json
 ```
 
-`--telemetry` defaults to OpenTelemetry JSON (`--telemetry-format otel`). The
-hosted engine reduces consented traces to receipts and scores reachable
-compositions. It also accepts native Langfuse `{trace, observations}` JSON,
-LangSmith REST Run / `/runs/query` arrays, and LangChain OpenLLMetry /
-OpenInference OTLP on that same default. GitHub org or enterprise audit-log
-JSON needs `--telemetry-format github` (or a TTY offer that sniffs the
-shape). That is not GitHub Actions job logs; workflow YAML is already in
-the source scan. ChatGPT Enterprise audit logs use `--telemetry-format
-chatgpt`; chat bodies belong in a `conversations.json` `--session-input`.
-AWS Bedrock model-invocation logs use `--telemetry-format bedrock` (or the
-same sniff) and may be a CloudWatch `FilterLogEvents` JSON export or a JSON
-array of `ModelInvocationLog` records. The public report may include a Next evidence
+`--telemetry` sniffs supported JSON (OTLP, native Langfuse, LangSmith REST,
+GitHub audit-log, ChatGPT enterprise audit, Bedrock invocation logs, and the
+other named `--telemetry-format` values). Unrecognized JSON is refused unless
+`--telemetry-format` is set explicitly. GitHub org or enterprise audit-log JSON
+needs `--telemetry-format github` (or a TTY offer that sniffs the shape). That
+is not GitHub Actions job logs; workflow YAML is already in the source scan.
+ChatGPT Enterprise audit logs use `--telemetry-format chatgpt`; chat bodies
+belong in a `conversations.json` `--session-input`. AWS Bedrock
+model-invocation logs use `--telemetry-format bedrock` (or the same sniff) and
+may be a CloudWatch `FilterLogEvents` JSON export or a JSON array of
+`ModelInvocationLog` records. The public report may include a Next evidence
 section for missing parent links, tool payloads, or identity; it does not
 return private scoring rules or attack-path names.
 
@@ -219,12 +236,13 @@ Other artifact flags cannot relabel a web conversation export.
   and shown as high-sensitivity paths before consent. The allowlist also covers
   common native/mobile build files and text formats including CSV, HTML, TXT,
   Gradle, Bazel, Make, Xcode configuration, and project files.
-- Known Provenex, Codex, and Claude credential stores are excluded before
+- Known Provenex, Codex, Claude, and Cursor credential stores are excluded before
   source selection when they lie under an eligible target, and cannot be
-  explicitly selected as artifacts. Known Claude/Codex session-history roots
-  are pruned from generic traversal; discovery and explicit `--session-input`
-  are the consented routes. Other artifact flags cannot relabel files beneath
-  those roots. Local protected paths are never shown or uploaded.
+  explicitly selected as artifacts. Known Claude/Codex session-history roots and
+  Cursor `agent-transcripts` trees are pruned from generic traversal; discovery
+  and explicit `--session-input` are the consented routes. Other artifact flags
+  cannot relabel files beneath those roots. Local protected paths are never shown
+  or uploaded.
 - Defaults are 5,000 source files, 1 MiB per source file, 16 MiB per telemetry
   artifact, and 64 MiB total. Requests are capped at 12 consent categories;
   user overrides are capped at 10,000 files, 4 MiB per source file, 256 artifacts
@@ -294,19 +312,21 @@ client-authored HMAC identity matching `pvxproj-` plus 64 lowercase hex
 characters. The service signs and echoes that scope so local comparisons stay
 bound to the same client-defined project. It is not Provenex authority, tenant
 identity, or a durable attestation. V2 `report_mode` is `joined` only when a
-supported telemetry-path or cross-family business join was evaluated;
-otherwise it is `source_preview`. Independent source, session, dependency, or
-runtime clues do not become a joined business-risk claim merely because they
-were uploaded together.
+supported telemetry-path join, cross-family business join, or session-to-source
+path-identity join was evaluated; otherwise it is `source_preview`. Independent
+source, session, dependency, or runtime clues do not become a joined
+business-risk claim merely because they were uploaded together. A session path
+join names a submitted file; it does not establish authorship, tool success, or
+human review.
 
 Every v2 finding includes a bounded `owner_view`: a consequence-first headline,
 one business-impact lane, a detector-authored evidence sentence (or an explicit
 unavailable fallback), separate `observed`, `inferred`, and `not_established`
-claims, and remediation with a goal, proposed changes, and acceptance criteria. Fully authored families cover
-the cross-trace composition of untrusted input, private data, and an outbound
-send, plus source-level webhook authenticity. Other detectors use an explicit
-fallback and do not promote their legacy evidence summary into claim-level
-facts.
+claims, and remediation with a goal, proposed changes, and acceptance criteria.
+Fully authored families cover the cross-trace composition of untrusted input,
+private data, and an outbound send, source-level webhook authenticity, and
+session-to-source path identity. Other detectors use an explicit fallback and
+do not promote their legacy evidence summary into claim-level facts.
 
 `owner_view.verification_key` is a stable opaque key only when a detector
 authors a structural identity; otherwise it is `null` and the CLI must not
@@ -331,15 +351,15 @@ the same target:
 provenex-check scan /path/to/project \
   --verify-against "$HOME/provenex-reports/check.json" \
   --json "$HOME/provenex-reports/check-next.json" \
-  --html "$HOME/provenex-reports/check-next.html"
+  --html "$HOME/provenex-reports/check-next.html" \
+  --md "$HOME/provenex-reports/check-next.md"
 ```
 
 The prior report must be a regular, owner-owned file with no group or other
 permissions (`chmod 600`); symlinks are rejected. The CLI validates its strict
 DTO, target, canonical bytes, and self-consistency signature before uploading
 the new run. Neither the prior response nor its local path enters the hosted
-request or the newly signed JSON report. The comparison exists only in local
-terminal and HTML views.
+request or the newly signed JSON report. The comparison exists only in local terminal, Markdown, and HTML views.
 
 Comparison outcomes are deliberately limited to `still-present` and
 `not-verifiable`. V2 derives an opaque `project_scope` by applying HMAC-SHA-256
@@ -354,7 +374,7 @@ absence “fixed.”
 
 The JSON output is the complete validated public response, including an opaque
 safe `service_release`, the exact applied policy, and the signed public report.
-HTML is generated locally from that same report. CLI report outputs and their
+HTML and Markdown are generated locally from that same report. CLI report outputs and their
 temporary files are created owner-only. The response-provided
 ephemeral public key verifies envelope self-consistency only: it does not
 establish Provenex issuer identity, server authenticity, or durable

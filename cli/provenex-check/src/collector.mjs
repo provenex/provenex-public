@@ -61,7 +61,19 @@ const MAX_SOURCE_DIRECTORIES = 50_000;
 const METADATA_READ_CHUNK_BYTES = 4 * 1024;
 
 export function localHomePath() {
-  return process.env.HOME ? path.resolve(process.env.HOME) : homedir();
+  const fromEnv = process.env.HOME || process.env.USERPROFILE;
+  return fromEnv ? path.resolve(fromEnv) : homedir();
+}
+
+export function cursorProjectSlug(root) {
+  return path.resolve(root)
+    .replace(/^[\\/]+/, '')
+    .replace(/:/g, '')
+    .replace(/[/\\]+/g, '-');
+}
+
+export function cursorTranscriptRoot(root, home = localHomePath()) {
+  return path.join(home, '.cursor', 'projects', cursorProjectSlug(root), 'agent-transcripts');
 }
 
 function isEqualOrWithin(parent, candidate) {
@@ -100,7 +112,7 @@ function localRelative(root, absolutePath) {
   return relative.split(path.sep).join('/');
 }
 
-function isSourceFile(name) {
+export function isSourceFile(name) {
   const lower = name.toLowerCase();
   if (lower === 'conversations.json') return false;
   if (lower === '.env' || lower.startsWith('.env.')) return true;
@@ -273,7 +285,7 @@ async function readFirstSessionMetadataRecord(filePath) {
   }
 }
 
-async function discoverUnder(directory, root, state) {
+async function discoverUnder(directory, root, state, { matchAllJsonl = false } = {}) {
   state.directories += 1;
   if (state.directories > DISCOVERY_LIMITS.maxDirectories) {
     throw new Error(`AI history discovery exceeds ${DISCOVERY_LIMITS.maxDirectories} directories`);
@@ -300,13 +312,21 @@ async function discoverUnder(directory, root, state) {
     if (entry.isSymbolicLink()) continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      await discoverUnder(absolute, root, state);
+      await discoverUnder(absolute, root, state, { matchAllJsonl });
       continue;
     }
     if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.jsonl') continue;
     state.examined += 1;
     if (state.examined > DISCOVERY_LIMITS.maxCandidateFiles) {
       throw new Error(`AI history discovery exceeds ${DISCOVERY_LIMITS.maxCandidateFiles} candidate session files`);
+    }
+    if (matchAllJsonl) {
+      state.matches.push({
+        kind: 'session',
+        path: absolute,
+        discovered: true,
+      });
+      continue;
     }
     let metadata;
     try {
@@ -334,6 +354,7 @@ export async function discoverAiHistory(root) {
   const userHome = localHomePath();
   await discoverUnder(path.join(userHome, '.claude', 'projects'), root, state);
   await discoverUnder(path.join(userHome, '.codex', 'sessions'), root, state);
+  await discoverUnder(cursorTranscriptRoot(root, userHome), root, state, { matchAllJsonl: true });
   return state.matches;
 }
 

@@ -3,9 +3,11 @@ import path from 'node:path';
 import {
   DEFAULT_EXCLUDED_DIRECTORIES,
   inspectAiHistory,
+  isSourceFile,
   resolveScanRoot,
   targetLabelForRoot,
 } from './collector.mjs';
+import { DEFAULT_LIMITS } from './limits.mjs';
 
 const LANGUAGE_BY_EXT = {
   '.ts': 'TypeScript',
@@ -69,6 +71,7 @@ async function inventory(root) {
     mcp: 0,
     agentDocs: 0,
     envFiles: 0,
+    sourceFiles: 0,
     fly: false,
     vercel: false,
     supabase: false,
@@ -100,6 +103,7 @@ async function inventory(root) {
         continue;
       }
       if (!entry.isFile()) continue;
+      if (isSourceFile(entry.name)) hits.sourceFiles += 1;
       const ext = path.extname(name);
       if (LANGUAGE_BY_EXT[ext]) {
         languages.set(LANGUAGE_BY_EXT[ext], (languages.get(LANGUAGE_BY_EXT[ext]) || 0) + 1);
@@ -147,12 +151,19 @@ async function inventory(root) {
   return { languages, hits, truncated: entries > MAX_ENTRIES || directories > MAX_DIRECTORIES };
 }
 
+export function sourceLimitWarning(sourceFiles, truncated, limit = DEFAULT_LIMITS.maxFiles) {
+  if (!(sourceFiles > limit || (truncated && sourceFiles >= limit))) return null;
+  return truncated
+    ? `At least ${sourceFiles} eligible source files before the inventory bound; default scan limit is ${limit}. Add --exclude PATTERN or raise --max-files before a real scan.`
+    : `${sourceFiles} eligible source files; default scan limit is ${limit}. Add --exclude PATTERN or raise --max-files before a real scan.`;
+}
+
 export function renderCapabilities() {
   return `Provenex Check evidence surfaces
 
 The CLI only collects what you consent to. On a TTY it first checks bounded
-Claude/Codex metadata for exact-project matches and asks before including full
-sessions. Other exports, traces, audit logs, and advisories stay behind an
+Claude/Codex/Cursor metadata for exact-project matches and asks before including
+full sessions. Other exports, traces, audit logs, and advisories stay behind an
 optional file offer. Then one hosted call (given a key) scores consented
 evidence. Private scoring rules stay on the server; the report says what
 compositions were visible and what to upload next.
@@ -160,8 +171,11 @@ compositions were visible and what to upload next.
 Surface                    Unlocks
 source and config          Credential shapes, payment/webhook mistakes,
                            agent auto-approve, CI pull_request_target
-AI sessions                Prompt/tool-call review from Claude/Codex JSONL
-                           or a ChatGPT/Claude conversations.json export
+AI sessions                Prompt/tool-call review from Claude/Codex JSONL,
+                           Cursor agent transcripts, or a ChatGPT/Claude
+                           conversations.json export. Matching tool paths
+                           can join to submitted files; unmatched stay
+                           unjoined. Path identity only.
 runtime traces (--telemetry)
                            Reachable agent compositions: untrusted input,
                            privileged data, and outbound sends. Accepts
@@ -226,8 +240,8 @@ export async function renderPlan(targetPath) {
   }
   if (sessionMatches > 0) {
     ready.push([
-      'prompt and tool-call review',
-      `from ${sessionMatches} Claude/Codex ${sessionMatches === 1 ? 'session' : 'sessions'} matching this project`,
+      'prompt and tool-call review; matching tool paths can join to submitted files',
+      `from ${sessionMatches} Claude/Codex/Cursor ${sessionMatches === 1 ? 'session' : 'sessions'} matching this project`,
     ]);
   }
   if (hits.otelFiles.length) {
@@ -270,11 +284,13 @@ export async function renderPlan(targetPath) {
     );
   }
   if (aiHistory.status === 'unavailable') {
-    lines.push('Claude/Codex session discovery could not finish safely; pass --session-input to include one.', '');
+    lines.push('Claude/Codex/Cursor session discovery could not finish safely; pass --session-input to include one.', '');
   }
   if (truncated) {
     lines.push('Inventory stopped at a traversal bound; treat this list as incomplete.', '');
   }
+  const limitWarning = sourceLimitWarning(hits.sourceFiles, truncated);
+  if (limitWarning) lines.push(limitWarning, '');
   lines.push(
     'Next',
     `  ${suggested.map((part) => (part.includes(' ') ? JSON.stringify(part) : part)).join(' ')}`,

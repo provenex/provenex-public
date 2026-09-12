@@ -19,6 +19,7 @@ test('catalog names working surfaces and refuses cursor/browser stores', () => {
   assert.match(EVIDENCE_CATALOG, /audit-log/);
   assert.match(EVIDENCE_CATALOG, /not Actions logs/);
   assert.match(EVIDENCE_CATALOG, /Cursor databases/);
+  assert.match(EVIDENCE_CATALOG, /Unrecognized JSON is not selected/);
   assert.doesNotMatch(EVIDENCE_CATALOG, /PVX-|confused-deputy|gadget-chain|echoleak/);
 });
 
@@ -60,6 +61,7 @@ test('classifyEvidencePath routes exports and refuses databases', () => {
     { command: 'audit' },
   );
   assert.equal(cloudwatchOnAudit.kind, 'cloudwatch_log');
+  assert.equal(classifyEvidencePath('/tmp/unknown.json', '{"foo":1}').skip, true);
 });
 
 test('offerEvidence asks about exact-project AI history first and defaults to inclusion', async () => {
@@ -83,7 +85,8 @@ test('offerEvidence asks about exact-project AI history first and defaults to in
   assert.equal(options.discoverAiHistory, true);
   assert.equal(options.artifacts.length, 0);
   assert.match(lines[0], /Local AI history: found 1/);
-  assert.match(questions[0], /does not yet join a session action to a source path/);
+  assert.match(questions[0], /Matching session tool paths can be joined/);
+  assert.match(questions[0], /unmatched session actions stay unjoined/);
   assert.match(questions[0], /Full session contents/);
   assert.match(questions[0], /\[Y\/n\]/);
   assert.match(questions[1], /Add another evidence file/);
@@ -189,6 +192,26 @@ test('explicit AI-history selection is reported without a second consent prompt'
   assert.match(questions[0], /Add another evidence file/);
 });
 
+test('offerEvidence skips unrecognized JSON instead of queuing OTLP', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'provenex-prompt-unknown-'));
+  try {
+    const unknown = path.join(directory, 'mystery.json');
+    await writeFile(unknown, '{"foo":1}\n');
+    const answers = ['yes', unknown, ''];
+    const options = { command: 'scan', artifacts: [], discoverAiHistory: false };
+    const lines = [];
+    await offerEvidence(options, {
+      question: async () => answers.shift() ?? '',
+      writeln: (line) => lines.push(line),
+      aiHistoryDiscovery: { status: 'none', matches: [], error: null },
+    });
+    assert.equal(options.artifacts.length, 0);
+    assert.match(lines.join('\n'), /Unrecognized JSON; not selected/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('an unavailable explicit AI-history request stops before other evidence prompts', async () => {
   let asked = false;
   const lines = [];
@@ -229,6 +252,24 @@ test('applyTelemetryFormats sniffs unlocked --telemetry files', async () => {
     };
     await applyTelemetryFormats(locked);
     assert.equal(locked.artifacts[0].format, 'otel');
+
+    const unknown = path.join(directory, 'unknown.json');
+    await writeFile(unknown, '{"foo":1}\n');
+    await assert.rejects(
+      () => applyTelemetryFormats({
+        telemetryFormat: 'otel',
+        telemetryFormatExplicit: false,
+        artifacts: [{ kind: 'telemetry', path: unknown, format: 'otel' }],
+      }),
+      /unrecognized telemetry JSON/,
+    );
+    const forced = {
+      telemetryFormat: 'otel',
+      telemetryFormatExplicit: true,
+      artifacts: [{ kind: 'telemetry', path: unknown, format: 'otel' }],
+    };
+    await applyTelemetryFormats(forced);
+    assert.equal(forced.artifacts[0].format, 'otel');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

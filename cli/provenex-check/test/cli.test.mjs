@@ -23,6 +23,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_EXCLUDED_DIRECTORIES,
+  cursorProjectSlug,
   targetLabelForRoot,
 } from '../src/collector.mjs';
 import {
@@ -42,7 +43,8 @@ import { confirmUpload } from '../src/main.mjs';
 import { atomicWrite } from '../src/output.mjs';
 import { CHECK_DATA_POLICY } from '../src/policy.mjs';
 import { validateHostedResponse } from '../src/report.mjs';
-import { renderHtml, renderTerminal } from '../src/render.mjs';
+import { renderHtml, renderMarkdown, renderTerminal } from '../src/render.mjs';
+import { sourceLimitWarning } from '../src/plan.mjs';
 import {
   comparePriorResponse,
   deriveProjectScope,
@@ -196,6 +198,45 @@ async function makeProject(t, { files = { 'app.js': 'export const value = 1;\n' 
   return { base, project, reports, config, projectScope };
 }
 
+function discoveryEnv(fakeHome, extra = {}) {
+  return { HOME: fakeHome, USERPROFILE: fakeHome, ...extra };
+}
+
+function restrictToOwner(filePath) {
+  if (process.platform !== 'win32') return;
+  const user = process.env.USERNAME || process.env.USER;
+  const result = spawnSync('icacls', [filePath, '/inheritance:r', '/grant:r', `${user}:(R)`], {
+    encoding: 'utf8',
+    windowsHide: true,
+    shell: false,
+  });
+  if (result.status !== 0) {
+    throw new Error(`icacls restrict failed: ${result.stdout}${result.stderr}`);
+  }
+}
+
+function grantUsersRead(filePath) {
+  if (process.platform !== 'win32') return;
+  const result = spawnSync('icacls', [filePath, '/grant', 'Users:(R)'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    shell: false,
+  });
+  if (result.status !== 0) {
+    throw new Error(`icacls grant failed: ${result.stdout}${result.stderr}`);
+  }
+}
+
+async function makeSymlink(target, linkPath) {
+  try {
+    await symlink(target, linkPath);
+    return true;
+  } catch (error) {
+    if (process.platform === 'win32' && error?.code === 'EPERM') return false;
+    throw error;
+  }
+}
+
 function runCli(args, { env = {}, input } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [CLI, ...args], {
@@ -289,7 +330,7 @@ test('posts the public request shape, writes explicit outputs, and preserves ser
   await writeFile(path.join(project, '.env'), 'DATABASE_URL=postgres://example.invalid/test\n');
   const outside = path.join(base, 'outside.js');
   await writeFile(outside, 'doNotUpload();\n');
-  await symlink(outside, path.join(project, 'linked.js'));
+  await makeSymlink(outside, path.join(project, 'linked.js'));
   const session = path.join(base, 'customer-and-session-id-123.jsonl');
   await writeFile(session, '{"type":"assistant","message":"hello"}\n');
 
@@ -601,9 +642,7 @@ test('loopback uses only its dev key and ignores production environment and conf
   assert.ok(!`${result.stdout}${result.stderr}`.includes('production-config-token'));
 });
 
-test('home-directory and ancestor scan roots are refused while project descendants remain eligible', {
-  skip: process.platform === 'win32',
-}, async (t) => {
+test('home-directory and ancestor scan roots are refused while project descendants remain eligible', async (t) => {
   const base = await temporaryDirectory(t);
   const fakeHome = path.join(base, 'home');
   const project = path.join(fakeHome, 'project');
@@ -611,18 +650,17 @@ test('home-directory and ancestor scan roots are refused while project descendan
   await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
 
   for (const refused of [fakeHome, base]) {
-    const result = await runCli(['scan', refused, '--dry-run'], { env: { HOME: fakeHome } });
+    const result = await runCli(['scan', refused, '--dry-run'], { env: discoveryEnv(fakeHome) });
     assert.equal(result.code, 3);
     assert.match(result.stderr, /home directory or one of its ancestors/);
   }
-  const allowed = await runCli(['scan', project, '--dry-run'], { env: { HOME: fakeHome } });
+  const allowed = await runCli(['scan', project, '--dry-run'], { env: discoveryEnv(fakeHome) });
   assert.equal(allowed.code, 0, allowed.stderr);
 });
 
-test('owner credential config is excluded for custom and canonicalized XDG paths', {
-  skip: process.platform === 'win32',
-}, async (t) => {
-  for (const mode of ['custom-xdg', 'symlinked-xdg']) {
+test('owner credential config is excluded for custom and canonicalized XDG paths', async (t) => {
+  const modes = process.platform === 'win32' ? ['custom-xdg'] : ['custom-xdg', 'symlinked-xdg'];
+  for (const mode of modes) {
     const base = await temporaryDirectory(t);
     const project = path.join(base, `credential-store-${mode}`);
     const fakeHome = path.join(base, 'home');
@@ -635,6 +673,7 @@ test('owner credential config is excluded for custom and canonicalized XDG paths
     await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
     await writeFile(configFile, JSON.stringify({ api_key: configSecret }));
     await chmod(configFile, 0o600);
+    restrictToOwner(configFile);
     const projectScope = deriveProjectScope(TEST_DEV_TOKEN, await realpath(project));
 
     let xdgConfigHome = actualConfigBase;
@@ -653,11 +692,10 @@ test('owner credential config is excluded for custom and canonicalized XDG paths
       })));
     });
     const result = await runCli(['scan', project, '--api-url', origin, '--yes'], {
-      env: {
-        HOME: fakeHome,
+      env: discoveryEnv(fakeHome, {
         XDG_CONFIG_HOME: xdgConfigHome,
         PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN,
-      },
+      }),
     });
 
     assert.equal(result.code, 0, `${mode}: ${result.stderr}`);
@@ -670,7 +708,7 @@ test('owner credential config is excluded for custom and canonicalized XDG paths
     const explicit = await runCli([
       'scan', project, '--dependency-audit', explicitConfigFile, '--dry-run',
     ], {
-      env: { HOME: fakeHome, XDG_CONFIG_HOME: xdgConfigHome },
+      env: discoveryEnv(fakeHome, { XDG_CONFIG_HOME: xdgConfigHome }),
     });
     assert.equal(explicit.code, 3);
     assert.match(explicit.stderr, /protected local-only file cannot be selected/);
@@ -691,9 +729,12 @@ test('known AI-history roots and descendants cannot become generic scan roots', 
   const explicitSession = path.join(codexDescendant, 'explicit-session.jsonl');
   await writeFile(explicitSession, '{"type":"assistant","message":"supported"}\n');
   await writeFile(path.join(claudeProjects, 'history.json'), '{"sensitive":true}\n');
+  const cursorProjects = path.join(fakeHome, '.cursor', 'projects');
+  await mkdir(cursorProjects, { recursive: true });
+  await writeFile(path.join(cursorProjects, 'notes.json'), '{"sensitive":true}\n');
 
-  for (const candidate of [codexSessions, codexDescendant, claudeProjects]) {
-    const result = await runCli(['scan', candidate, '--dry-run'], { env: { HOME: fakeHome } });
+  for (const candidate of [codexSessions, codexDescendant, claudeProjects, cursorProjects]) {
+    const result = await runCli(['scan', candidate, '--dry-run'], { env: discoveryEnv(fakeHome) });
     assert.equal(result.code, 3);
     assert.match(result.stderr, /refusing to scan a protected AI-history directory/);
   }
@@ -703,14 +744,14 @@ test('known AI-history roots and descendants cannot become generic scan roots', 
   await writeFile(path.join(project, 'app.js'), 'export const safe = true;\n');
   const mislabeled = await runCli([
     'scan', project, '--dependency-audit', explicitSession, '--dry-run',
-  ], { env: { HOME: fakeHome } });
+  ], { env: discoveryEnv(fakeHome) });
   assert.equal(mislabeled.code, 3);
   assert.match(mislabeled.stderr, /require explicit --session-input consent/);
   assert.ok(!`${mislabeled.stdout}${mislabeled.stderr}`.includes(explicitSession));
 
   const consented = await runCli([
     'scan', project, '--session-input', explicitSession, '--dry-run',
-  ], { env: { HOME: fakeHome } });
+  ], { env: discoveryEnv(fakeHome) });
   assert.equal(consented.code, 0, consented.stderr);
   assert.match(consented.stdout, /High-sensitivity categories: ai_session_history/);
   assert.match(consented.stdout, /session: .*explicit-session\.jsonl/);
@@ -727,7 +768,7 @@ test('known Codex auth store cannot be swept or explicitly selected', async (t) 
 
   const result = await runCli([
     'scan', project, '--dependency-audit', authFile, '--dry-run',
-  ], { env: { HOME: fakeHome } });
+  ], { env: discoveryEnv(fakeHome) });
   assert.equal(result.code, 3);
   assert.match(result.stderr, /protected local-only file cannot be selected/);
   assert.ok(!`${result.stdout}${result.stderr}`.includes(authFile));
@@ -819,7 +860,7 @@ test('request timeout is bounded, documented, and the flag overrides the environ
   );
   assert.equal(parseArgs(['scan', '.'], {}).requestTimeoutMs, null);
   assert.match(
-    usage(),
+    usage('scan'),
     new RegExp(`default ${REQUEST_TIMEOUT.defaultSeconds},\\s+max ${REQUEST_TIMEOUT.maxSeconds}`),
   );
 
@@ -853,10 +894,11 @@ test('collection bounds and symlink artifacts fail as operational errors', async
   const artifact = path.join(base, 'real-session.jsonl');
   const linked = path.join(base, 'linked-session.jsonl');
   await writeFile(artifact, '{}\n');
-  await symlink(artifact, linked);
-  const symlinked = await runCli(['scan', project, '--session-input', linked, '--dry-run']);
-  assert.equal(symlinked.code, 3);
-  assert.match(symlinked.stderr, /must not be a symbolic link/);
+  if (await makeSymlink(artifact, linked)) {
+    const symlinked = await runCli(['scan', project, '--session-input', linked, '--dry-run']);
+    assert.equal(symlinked.code, 3);
+    assert.match(symlinked.stderr, /must not be a symbolic link/);
+  }
 
   for (const [command, flag, kind] of [
     ['audit', '--aws-input', 'aws_cost'],
@@ -882,10 +924,11 @@ test('report outputs reject scan overlap and symlinks', async (t) => {
   const real = path.join(base, 'existing.json');
   const linked = path.join(reports, 'linked.json');
   await writeFile(real, '{}\n');
-  await symlink(real, linked);
-  const symlinked = await runCli(['scan', project, '--json', linked, '--force', '--dry-run']);
-  assert.equal(symlinked.code, 3);
-  assert.match(symlinked.stderr, /symbolic-link output/);
+  if (await makeSymlink(real, linked)) {
+    const symlinked = await runCli(['scan', project, '--json', linked, '--force', '--dry-run']);
+    assert.equal(symlinked.code, 3);
+    assert.match(symlinked.stderr, /symbolic-link output/);
+  }
 });
 
 test('failed report content writes remove their owner-only temporary file', async (t) => {
@@ -1305,6 +1348,7 @@ test('--verify-against validates an owner-only prior report and keeps comparison
   });
   await writeFile(priorPath, `${JSON.stringify(previous)}\n`, { mode: 0o600 });
   await chmod(priorPath, 0o600);
+  restrictToOwner(priorPath);
 
   let captured;
   const current = validResponse({ findings: [], reportMode: 'joined', projectScope });
@@ -1332,7 +1376,9 @@ test('--verify-against validates an owner-only prior report and keeps comparison
   assert.doesNotMatch(result.stdout, /:\s*fixed\b/i);
   assert.deepEqual(JSON.parse(await readFile(currentPath, 'utf8')), current);
   assert.ok(!Object.hasOwn(JSON.parse(await readFile(currentPath, 'utf8')), 'verification'));
-  assert.equal((await stat(currentPath)).mode & 0o077, 0);
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(currentPath)).mode & 0o077, 0);
+  }
   assert.match(await readFile(htmlPath, 'utf8'), /not-verifiable/);
 });
 
@@ -1341,6 +1387,7 @@ test('--verify-against refuses unsafe local inputs and non-scan use before uploa
   const inProject = path.join(project, 'prior-report.json');
   await writeFile(inProject, `${JSON.stringify(validResponse({ findings: [] }))}\n`, { mode: 0o600 });
   await chmod(inProject, 0o600);
+  restrictToOwner(inProject);
   let inProjectRequests = 0;
   const origin = await mockServer(t, async (_request, response) => {
     inProjectRequests += 1;
@@ -1361,6 +1408,7 @@ test('--verify-against refuses unsafe local inputs and non-scan use before uploa
     { mode: 0o600 },
   );
   await chmod(priorPath, 0o600);
+  restrictToOwner(priorPath);
   const priorHardlink = path.join(reports, 'prior-hardlink.json');
   await link(priorPath, priorHardlink);
   for (const artifactPath of [priorPath, priorHardlink]) {
@@ -1375,6 +1423,7 @@ test('--verify-against refuses unsafe local inputs and non-scan use before uploa
       '--api-url', overlapOrigin,
       '--verify-against', priorPath,
       '--telemetry', artifactPath,
+      '--telemetry-format', 'otel',
       '--yes',
     ], { env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN } });
     assert.equal(overlap.code, 3);
@@ -1385,19 +1434,23 @@ test('--verify-against refuses unsafe local inputs and non-scan use before uploa
   const permissive = path.join(reports, 'permissive.json');
   await writeFile(permissive, '{}\n', { mode: 0o644 });
   await chmod(permissive, 0o644);
+  grantUsersRead(permissive);
   const unsafe = await runCli(['scan', project, '--verify-against', permissive, '--yes']);
   assert.equal(unsafe.code, 2);
   assert.match(unsafe.stderr, /owner-only/);
 
-  const linked = path.join(reports, 'linked.json');
-  await symlink(permissive, linked);
-  const symlinked = await runCli(['scan', project, '--verify-against', linked, '--yes']);
-  assert.equal(symlinked.code, 2);
-  assert.match(symlinked.stderr, /symbolic link/);
+  if (process.platform !== 'win32') {
+    const linked = path.join(reports, 'linked.json');
+    await symlink(permissive, linked);
+    const symlinked = await runCli(['scan', project, '--verify-against', linked, '--yes']);
+    assert.equal(symlinked.code, 2);
+    assert.match(symlinked.stderr, /symbolic link/);
+  }
 
   const invalid = path.join(reports, 'invalid.json');
   await writeFile(invalid, '{}\n', { mode: 0o600 });
   await chmod(invalid, 0o600);
+  restrictToOwner(invalid);
   const invalidResult = await runCli(['scan', project, '--verify-against', invalid, '--yes']);
   assert.equal(invalidResult.code, 2);
   assert.match(invalidResult.stderr, /prior Check report failed validation/);
@@ -1504,7 +1557,7 @@ test('opt-in AI discovery uploads only exact-cwd sessions with opaque labels', a
   const result = await runCli([
     'scan', project, '--discover-ai-history', '--api-url', origin, '--yes',
   ], {
-    env: { HOME: fakeHome, PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
+    env: discoveryEnv(fakeHome, { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN }),
   });
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /AI history: requested; 1 exact-cwd matches/);
@@ -1537,7 +1590,7 @@ test('--yes approves the upload but does not silently include discovered AI hist
   const result = await runCli([
     'scan', project, '--api-url', origin, '--yes',
   ], {
-    env: { HOME: fakeHome, PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN },
+    env: discoveryEnv(fakeHome, { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN }),
   });
 
   assert.equal(result.code, 0, result.stderr);
@@ -1580,7 +1633,7 @@ test('AI discovery accounts only bounded first metadata records across large ses
   }
 
   const result = await runCli(['scan', project, '--discover-ai-history', '--dry-run'], {
-    env: { HOME: fakeHome },
+    env: discoveryEnv(fakeHome),
   });
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /AI history: requested; 149 exact-cwd matches/);
@@ -1934,6 +1987,7 @@ test('npm manifest is the scoped public @provenex/check package', async () => {
     'src/args.mjs VERSION must equal package.json version');
   assert.notEqual(manifest.private, true);
   assert.equal(manifest.publishConfig?.access, 'public');
+  assert.ok(manifest.files.includes('skills/'));
   assert.equal(manifest.bin['provenex-check'], 'bin/provenex-check.js');
   // The runtime checkpoint is the package's one importable subpath. The CLI
   // stays the bin; there is deliberately no root export.
@@ -2417,21 +2471,39 @@ test('an incomplete hosted analysis preserves the public exit code 3', async (t)
   assert.match(result.stdout, /Only part of the selected evidence could be evaluated/);
 });
 
-test('help documents plan, capabilities, and telemetry', async () => {
-  const result = await runCli(['--help']);
-  assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /provenex-check plan/);
-  assert.match(result.stdout, /provenex-check capabilities/);
-  assert.match(result.stdout, /--telemetry PATH/);
-  assert.match(result.stdout, /--no-prompt/);
-  assert.match(result.stdout, /--verify-against PATH/);
-  assert.match(result.stdout, /--timeout SECONDS/);
-  assert.match(result.stdout, /--list-files/);
-  assert.match(result.stdout, /without discovering or including AI history/);
-  assert.match(result.stdout, /langfuse/);
-  assert.match(result.stdout, /audit-log JSON/);
-  assert.doesNotMatch(result.stdout, /PVX-/);
-  assert.doesNotMatch(result.stdout, /indirect-prompt-injection|gadget-chain|confused-deputy|echoleak|greshake|trust_zones/);
+test('help documents two jobs; scan --help lists collector flags', async () => {
+  const overview = await runCli(['--help']);
+  assert.equal(overview.code, 0, overview.stderr);
+  assert.match(overview.stdout, /Local Check/);
+  assert.match(overview.stdout, /Your App gateway/);
+  assert.match(overview.stdout, /provenex-check <command> --help/);
+  assert.doesNotMatch(overview.stdout, /--telemetry PATH/);
+  assert.doesNotMatch(overview.stdout, /PVX-/);
+
+  const scanHelp = await runCli(['scan', '--help']);
+  assert.equal(scanHelp.code, 0, scanHelp.stderr);
+  const scanShortHelp = await runCli(['scan', '-h']);
+  assert.equal(scanShortHelp.code, 0, scanShortHelp.stderr);
+  assert.match(scanShortHelp.stdout, /--telemetry PATH/);
+  assert.match(scanHelp.stdout, /--telemetry PATH/);
+  assert.match(scanHelp.stdout, /--md PATH/);
+  assert.match(scanHelp.stdout, /--no-prompt/);
+  assert.match(scanHelp.stdout, /--verify-against PATH/);
+  assert.match(scanHelp.stdout, /--timeout SECONDS/);
+  assert.match(scanHelp.stdout, /--list-files/);
+  assert.match(scanHelp.stdout, /without discovering or including AI history/);
+  assert.match(scanHelp.stdout, /Cursor/);
+  assert.match(scanHelp.stdout, /langfuse/);
+  assert.match(scanHelp.stdout, /audit-log JSON/);
+  assert.match(scanHelp.stdout, /Matching tool paths can join to submitted files/);
+  assert.match(scanHelp.stdout, /unmatched stay unjoined/);
+  assert.doesNotMatch(scanHelp.stdout, /PVX-/);
+  assert.doesNotMatch(scanHelp.stdout, /indirect-prompt-injection|gadget-chain|confused-deputy|echoleak|greshake|trust_zones/);
+
+  const coverageHelp = await runCli(['coverage', '--help']);
+  assert.equal(coverageHelp.code, 0, coverageHelp.stderr);
+  assert.match(coverageHelp.stdout, /PROVENEX_SDK_KEY/);
+  assert.doesNotMatch(coverageHelp.stdout, /requires --gateway-url/);
 });
 
 test('capabilities lists evidence surfaces without leaking private classifiers', async () => {
@@ -2444,6 +2516,8 @@ test('capabilities lists evidence surfaces without leaking private classifiers',
   assert.match(result.stdout, /privileged data/);
   assert.match(result.stdout, /outbound send/);
   assert.match(result.stdout, /telemetry-format bedrock/);
+  assert.match(result.stdout, /Matching tool paths/);
+  assert.match(result.stdout, /unmatched stay/);
   assert.doesNotMatch(result.stdout, /PVX-/);
   assert.doesNotMatch(result.stdout, /indirect-prompt-injection|gadget-chain|confused-deputy|echoleak|greshake|trust_zones|cross-zone-composition/);
 });
@@ -2467,6 +2541,7 @@ test('plan inventories local surfaces without uploading', async (t) => {
   assert.match(result.stdout, /^Next$/m);
   assert.match(result.stdout, /--telemetry traces\.otlp\.json/);
   assert.match(result.stdout, /--dry-run/);
+  assert.doesNotMatch(result.stdout, /default scan limit/);
   // A surface with nothing behind it is not a decision, so it must not print a
   // row at all. This is what keeps the first run short as the surface list grows.
   assert.doesNotMatch(result.stdout, /: 0$/m);
@@ -2584,4 +2659,90 @@ test('scan --no-prompt stays non-interactive like --yes dry-run', async (t) => {
   assert.doesNotMatch(result.stdout, /Add another evidence file|Add an evidence file path|Local AI history:/);
   assert.match(result.stdout, /AI history: not requested/);
   assert.match(result.stdout, /nothing was uploaded and no API key was read/);
+});
+
+test('opt-in AI discovery includes Cursor agent transcripts bound to the project slug', async (t) => {
+  const { base, project } = await makeProject(t);
+  const fakeHome = path.join(base, 'home');
+  const canonicalProject = await realpath(project);
+  const transcripts = path.join(
+    fakeHome,
+    '.cursor',
+    'projects',
+    cursorProjectSlug(canonicalProject),
+    'agent-transcripts',
+    'chat-id',
+  );
+  await mkdir(transcripts, { recursive: true });
+  await writeFile(
+    path.join(transcripts, 'chat-id.jsonl'),
+    `${JSON.stringify({ role: 'user', message: { content: [{ type: 'text', text: 'cursor-match' }] } })}\n`,
+  );
+  const other = path.join(fakeHome, '.cursor', 'projects', 'Users-other-app', 'agent-transcripts');
+  await mkdir(other, { recursive: true });
+  await writeFile(path.join(other, 'other.jsonl'), `${JSON.stringify({ role: 'user' })}\n`);
+
+  const result = await runCli(['scan', project, '--discover-ai-history', '--dry-run'], {
+    env: discoveryEnv(fakeHome),
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /AI history: requested; 1 exact-cwd matches/);
+  assert.ok(!result.stdout.includes('chat-id'));
+  assert.ok(!result.stdout.includes('other.jsonl'));
+});
+
+test('unrecognized --telemetry JSON fails closed unless the format is explicit', async (t) => {
+  const { base, project } = await makeProject(t);
+  const unknown = path.join(base, 'mystery.json');
+  await writeFile(unknown, '{"foo":1}\n');
+  const refused = await runCli(['scan', project, '--telemetry', unknown, '--dry-run']);
+  assert.equal(refused.code, 2);
+  assert.match(refused.stderr, /unrecognized telemetry JSON/);
+
+  const forced = await runCli([
+    'scan', project, '--telemetry', unknown, '--telemetry-format', 'otel', '--dry-run',
+  ]);
+  assert.equal(forced.code, 0, forced.stderr);
+  assert.match(forced.stdout, /runtime_telemetry/);
+});
+
+test('writes a local markdown report from the validated public DTO', async (t) => {
+  const { project, reports, projectScope } = await makeProject(t);
+  const origin = await mockServer(t, async (request, response) => {
+    await readRequest(request);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(validResponse({
+      findings: [publicFinding()],
+      projectScope,
+    })));
+  });
+  const mdOutput = path.join(reports, 'report.md');
+  const result = await runCli([
+    'scan', project, '--api-url', origin, '--yes', '--md', mdOutput,
+  ], { env: { PROVENEX_CHECK_DEV_API_KEY: TEST_DEV_TOKEN } });
+  assert.equal(result.code, 1, result.stderr);
+  const markdown = await readFile(mdOutput, 'utf8');
+  assert.match(markdown, /^# Provenex Check: COMPLETE/m);
+  assert.match(markdown, /## What could affect your business/);
+  assert.match(markdown, /A production boundary may expose customer data/);
+  assert.match(result.stdout, /Wrote /);
+});
+
+test('sourceLimitWarning fires only at or above the default scan cap', () => {
+  assert.equal(sourceLimitWarning(5000, false), null);
+  assert.match(sourceLimitWarning(5001, false), /5001 eligible source files/);
+  assert.match(sourceLimitWarning(5000, true), /At least 5000 eligible source files/);
+  assert.equal(sourceLimitWarning(12, true, 5000), null);
+});
+
+test('renderMarkdown matches the owner-visible terminal findings', () => {
+  const response = validResponse({
+    findings: [publicFinding()],
+    reportMode: 'joined',
+  });
+  const markdown = renderMarkdown(response);
+  const terminal = renderTerminal(response);
+  assert.match(markdown, /## Coverage/);
+  assert.match(markdown, /A production boundary may expose customer data/);
+  assert.match(terminal, /A production boundary may expose customer data/);
 });

@@ -40,8 +40,10 @@ export async function prepareOutputs(outputs, root, force) {
   const prepared = {};
   if (outputs.json) prepared.json = await resolveOutput(outputs.json, root, force);
   if (outputs.html) prepared.html = await resolveOutput(outputs.html, root, force);
-  if (prepared.json && prepared.html && prepared.json === prepared.html) {
-    throw new Error('--json and --html must use different output paths');
+  if (outputs.md) prepared.md = await resolveOutput(outputs.md, root, force);
+  const destinations = [prepared.json, prepared.html, prepared.md].filter(Boolean);
+  if (new Set(destinations).size !== destinations.length) {
+    throw new Error('--json, --html, and --md must use different output paths');
   }
   return prepared;
 }
@@ -83,7 +85,7 @@ export async function atomicWrite(destination, content, force) {
   }
 }
 
-export async function writeReports(prepared, response, renderedHtml, force) {
+export async function writeReports(prepared, response, renderedHtml, renderedMarkdown, force) {
   const written = [];
   if (prepared.json) {
     await atomicWrite(prepared.json, `${JSON.stringify(response, null, 2)}\n`, force);
@@ -92,6 +94,10 @@ export async function writeReports(prepared, response, renderedHtml, force) {
   if (prepared.html) {
     await atomicWrite(prepared.html, renderedHtml, force);
     written.push(prepared.html);
+  }
+  if (prepared.md) {
+    await atomicWrite(prepared.md, renderedMarkdown, force);
+    written.push(prepared.md);
   }
   return written;
 }
