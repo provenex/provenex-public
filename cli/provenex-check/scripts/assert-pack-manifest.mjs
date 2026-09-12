@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 
 const EXPECTED_FILES = [
   'LICENSE',
@@ -36,11 +37,19 @@ const EXPECTED_FILES = [
   'skills/provenex-check/SKILL.md',
 ].sort();
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const packed = spawnSync(npm, ['pack', '--dry-run', '--json', '--ignore-scripts'], {
-  encoding: 'utf8',
-  shell: false,
-});
+const args = ['pack', '--dry-run', '--json', '--ignore-scripts'];
+const packed = process.platform === 'win32'
+  ? spawnSync(
+      process.execPath,
+      [
+        // Node 22+ refuses spawnSync('npm.cmd') with shell:false (EINVAL).
+        // Drive the same npm CLI the .cmd shim would have launched.
+        path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+        ...args,
+      ],
+      { encoding: 'utf8', shell: false },
+    )
+  : spawnSync('npm', args, { encoding: 'utf8', shell: false });
 
 if (packed.error) throw packed.error;
 if (packed.status !== 0) {
