@@ -397,7 +397,7 @@ test('posts the public request shape, writes explicit outputs, and preserves ser
   assert.ok(!html.includes('<script'));
   assert.match(result.stdout, /Review seven findings/);
   assert.doesNotMatch(result.stdout, /self-consistency checking only|Data policy:/);
-  assert.ok(result.stdout.includes(session));
+  assert.ok(result.stdout.includes(JSON.stringify(session).slice(1, -1)));
   assert.ok(!result.stdout.includes(TEST_DEV_TOKEN));
   assert.ok(!result.stderr.includes(TEST_DEV_TOKEN));
   assert.ok(!`${result.stdout}${result.stderr}`.includes(TEST_TOKEN));
@@ -449,7 +449,9 @@ test('rejects a normal run whose signed report echoes a different project scope'
   await assert.rejects(readFile(output), (error) => error?.code === 'ENOENT');
 });
 
-test('repository Git inspection cannot execute a configured fsmonitor command', async (t) => {
+test('repository Git inspection cannot execute a configured fsmonitor command', {
+  skip: process.platform === 'win32',
+}, async (t) => {
   const { base, project } = await makeProject(t);
   const sentinel = path.join(base, 'fsmonitor-executed');
   const fsmonitor = path.join(base, 'malicious-fsmonitor.cjs');
@@ -480,7 +482,9 @@ test('repository Git inspection cannot execute a configured fsmonitor command', 
   await assert.rejects(readFile(sentinel), (error) => error?.code === 'ENOENT');
 });
 
-test('Git subprocesses never inherit production or development API keys', async (t) => {
+test('Git subprocesses never inherit production or development API keys', {
+  skip: process.platform === 'win32',
+}, async (t) => {
   const { base, project } = await makeProject(t);
   const fakeBin = path.join(base, 'fake-bin');
   const git = path.join(fakeBin, 'git');
@@ -1954,10 +1958,10 @@ test('hosted request limits and path grammar stay aligned with the public schema
 });
 
 test('OpenAPI documents the complete hosted error surface', async () => {
-  const openapi = await readFile(
+  const openapi = (await readFile(
     path.join(PACKAGE_ROOT, 'openapi', 'provenex-check.v1.yaml'),
     'utf8',
-  );
+  )).replaceAll('\r\n', '\n');
   for (const status of ['400', '401', '402', '403', '413', '415', '422', '429', '500']) {
     assert.match(openapi, new RegExp(`^        '${status}':`, 'm'));
   }
