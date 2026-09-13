@@ -83,5 +83,11 @@ assert.deepEqual(
 );
 
 const executable = packaged.files.find(({ path }) => path === 'bin/provenex-check.js');
-assert.ok((executable.mode & 0o111) !== 0, 'packaged CLI entry point must remain executable');
+assert.ok(executable, 'packaged CLI entry point must remain in the tarball');
+if (process.platform !== 'win32') {
+  // npm pack on Windows does not record POSIX execute bits. The tag-gated
+  // publish job runs on Ubuntu and still requires the shebang file to be
+  // executable in the tarball.
+  assert.ok((executable.mode & 0o111) !== 0, 'packaged CLI entry point must remain executable');
+}
 process.stdout.write(`Verified ${actualFiles.length} explicitly approved package files.\n`);
