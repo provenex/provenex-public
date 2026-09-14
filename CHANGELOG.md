@@ -12,6 +12,15 @@ Public CLI collector (intended for `0.1.0-alpha.8`):
 - `plan` warns when eligible source files exceed the default scan cap.
 - `--md PATH` writes a locally rendered Markdown report.
 - Ship `skills/provenex-check/SKILL.md` and `AGENTS.md` for coding agents.
+  The Check skill also fires when a builder asks whether an app that can
+  refund, email, or deploy meets security needs. Default path is dry-run
+  Check, then App private alpha. No public Edge install.
+- Publish identical discovery copies at `.agents/skills/` and
+  `.claude/skills/` so Codex and Claude Code can find the skills without a
+  copy step.
+- Add vendor-neutral `skills/agent-decision-telemetry/SKILL.md` for apps
+  that emit little or no telemetry. It is not Provenex-specific and is not
+  packed into `@provenex/check`.
 - Example GitHub Action for a non-interactive dry-run; writes the
   preflight to the job summary and does not claim a merge all-clear.
 - Tag-gated publish creates the matching GitHub Release.

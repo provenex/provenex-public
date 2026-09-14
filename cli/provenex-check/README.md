@@ -23,9 +23,13 @@ views locally. Server-rendered views and private engine fields are rejected.
 `provenex-check --help` lists two jobs: local Check, and your App gateway.
 `provenex-check scan --help` lists collector flags. A coding-agent skill lives
 in [`skills/provenex-check/SKILL.md`](skills/provenex-check/SKILL.md). Copy it
-to `.cursor/skills/provenex-check/` or `.claude/skills/provenex-check/`. Codex
-and other agents can follow [`AGENTS.md`](../../AGENTS.md). The skill runs
-`plan` and `scan --dry-run` without uploading.
+to `.agents/skills/provenex-check/`, `.claude/skills/provenex-check/`, or
+`.cursor/skills/provenex-check/`. Codex and other agents can follow
+[`AGENTS.md`](../../AGENTS.md). The skill runs `plan` and `scan --dry-run`
+without uploading and does not install Edge. Apps that emit little or no
+telemetry should copy the sibling
+[`agent-decision-telemetry`](../../skills/agent-decision-telemetry/SKILL.md)
+skill first. That skill is vendor-neutral lineage instrumentation.
 
 ## Requirements and installation
 

@@ -17,6 +17,11 @@ The preflight identifies the telemetry category, local path, format, size, and
 total request bounds. A real upload requires `PROVENEX_API_KEY` and interactive
 approval, or `--yes` in automation.
 
+Coding agents adding first instrumentation to an app that emits little or no
+telemetry should follow
+[`../skills/agent-decision-telemetry/SKILL.md`](../skills/agent-decision-telemetry/SKILL.md).
+That skill is vendor-neutral. This page is the Check-specific input contract.
+
 ## Minimum OpenTelemetry shape
 
 For each relevant span, provide:

@@ -34,8 +34,15 @@ The CLI sends only the evidence shown in the approved preflight. It validates
 the bounded public response and renders terminal, JSON, Markdown, and HTML
 views locally. `provenex-check --help` splits local Check from App-gateway
 commands. Copy [`cli/provenex-check/skills/provenex-check/SKILL.md`](cli/provenex-check/skills/provenex-check/SKILL.md)
-into `.cursor/skills/provenex-check/` or `.claude/skills/provenex-check/`.
-[`AGENTS.md`](AGENTS.md) is the Codex-oriented copy of the same path.
+into `.agents/skills/provenex-check/`, `.claude/skills/provenex-check/`, or
+`.cursor/skills/provenex-check/`. This repository already publishes those
+discovery paths. [`AGENTS.md`](AGENTS.md) is the Codex-oriented copy of the
+same path. For apps that emit little or no telemetry, also copy
+[`skills/agent-decision-telemetry/SKILL.md`](skills/agent-decision-telemetry/SKILL.md)
+into `.agents/skills/agent-decision-telemetry/`. That skill is vendor-neutral
+lineage instrumentation, not a Provenex product path. Coding agents that search
+skill registries can install from `provenex/provenex-public` after this tree is
+synced to GitHub.
 See [public CLI onboarding](docs/onboarding.md) for the complete path and
 [`cli/provenex-check/README.md`](cli/provenex-check/README.md) for every input
 and safety control.

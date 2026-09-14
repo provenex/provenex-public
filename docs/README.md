@@ -8,7 +8,11 @@
   exclusions, prompts, and response validation.
 - [Coding-agent skill](../cli/provenex-check/skills/provenex-check/SKILL.md):
   run `plan` and `--dry-run` from Cursor, Claude, or Codex without uploading.
+  Discovery copies live at [`.agents/skills/provenex-check/`](../.agents/skills/provenex-check/SKILL.md)
+  and [`.claude/skills/provenex-check/`](../.claude/skills/provenex-check/SKILL.md).
 - [AGENTS.md](../AGENTS.md): the same consent-first path for coding agents.
+- [Agent-decision telemetry skill](../skills/agent-decision-telemetry/SKILL.md):
+  vendor-neutral lineage fields for apps that emit little or no telemetry.
 - [GitHub Action](../.github/actions/provenex-check/action.yml): CI dry-run
   (not a merge all-clear).
 - [Contributing](../CONTRIBUTING.md): tests, pack boundary, and release tags.
