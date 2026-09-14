@@ -3,6 +3,11 @@ name: Provenex Check CLI
 # No pull_request path filter, for the same reason as sample-assets.yml: `test`
 # is a required check on main, and a required check that cannot report on a
 # given pull request blocks it permanently rather than skipping it.
+#
+# Matrix cells report as `test (ubuntu-latest, 22)` and similar. Branch
+# protection still requires the unsuffixed name `test`, so a rollup job with
+# that name must always run (including after a matrix failure) or the PR stays
+# pending forever.
 on:
   pull_request:
   push:
@@ -15,7 +20,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  test-matrix:
+    name: test (${{ matrix.os }}, ${{ matrix.node-version }})
     strategy:
       fail-fast: false
       matrix:
@@ -38,3 +44,12 @@ jobs:
       - name: Validate publishable package
         working-directory: cli/provenex-check
         run: npm run check:pack
+
+  test:
+    needs: test-matrix
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: All matrix cells passed
+        run: test "${{ needs.test-matrix.result }}" = "success"
