@@ -7,10 +7,19 @@ import { fileURLToPath } from 'node:url';
 const cliRoot = fileURLToPath(new URL('..', import.meta.url));
 const publicRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
+// Windows checkouts may convert LF to CRLF. Content assertions use \n.
+function normalizeNewlines(text) {
+  return text.replaceAll('\r\n', '\n');
+}
+
+async function readUtf8(filePath) {
+  return normalizeNewlines(await readFile(filePath, 'utf8'));
+}
+
 async function assertIdenticalCopies(canonicalPath, copies) {
-  const canonical = await readFile(canonicalPath, 'utf8');
+  const canonical = await readUtf8(canonicalPath);
   for (const copy of copies) {
-    assert.equal(await readFile(copy, 'utf8'), canonical, copy);
+    assert.equal(await readUtf8(copy), canonical, copy);
   }
   return canonical;
 }
@@ -36,11 +45,8 @@ test('agent-decision-telemetry discovery copies stay identical to the canonical 
 });
 
 test('the Check skill fires on security requirements and stays off the Edge path', async () => {
-  const skill = await readFile(
-    path.join(cliRoot, 'skills/provenex-check/SKILL.md'),
-    'utf8',
-  );
-  const agentsGuide = await readFile(path.join(publicRoot, 'AGENTS.md'), 'utf8');
+  const skill = await readUtf8(path.join(cliRoot, 'skills/provenex-check/SKILL.md'));
+  const agentsGuide = await readUtf8(path.join(publicRoot, 'AGENTS.md'));
 
   assert.match(skill, /name: provenex-check/);
   assert.match(skill, /meets security or oversight needs/);
@@ -62,9 +68,8 @@ test('the Check skill fires on security requirements and stays off the Edge path
 });
 
 test('agent-decision-telemetry is a vendor-neutral lineage baseline', async () => {
-  const skill = await readFile(
+  const skill = await readUtf8(
     path.join(publicRoot, 'skills/agent-decision-telemetry/SKILL.md'),
-    'utf8',
   );
 
   assert.match(skill, /name: agent-decision-telemetry/);
@@ -84,4 +89,19 @@ test('agent-decision-telemetry is a vendor-neutral lineage baseline', async () =
   assert.doesNotMatch(skill, /provenex\.\*/);
   assert.doesNotMatch(skill, /npx @provenex\/check/);
   assert.doesNotMatch(skill, /docker pull|ghcr\.io|helm install/i);
+});
+
+test('multiline skill phrases still match after a CRLF checkout', async () => {
+  const asCrlf = async (filePath) =>
+    normalizeNewlines(
+      (await readFile(filePath, 'utf8')).replaceAll('\r\n', '\n').replaceAll('\n', '\r\n'),
+    );
+
+  const skill = await asCrlf(path.join(cliRoot, 'skills/provenex-check/SKILL.md'));
+  const telemetry = await asCrlf(
+    path.join(publicRoot, 'skills/agent-decision-telemetry/SKILL.md'),
+  );
+
+  assert.match(skill, /Never offer a public\n  Edge install/);
+  assert.match(telemetry, /Prefer 100 percent\n  sampling/);
 });
