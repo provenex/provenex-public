@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { UsageError } from './errors.mjs';
-import { EXCLUDE_LIMITS, SERVER_LIMITS } from './limits.mjs';
+import { DEFAULT_LIMITS, EXCLUDE_LIMITS, SERVER_LIMITS } from './limits.mjs';
 
 export const VERSION = '0.1.0-alpha.7';
 
@@ -25,6 +25,7 @@ const VALUE_FLAGS = new Set([
   '--format',
   '--json',
   '--html',
+  '--md',
   '--verify-against',
   '--timeout',
   '--max-files',
@@ -36,60 +37,62 @@ const VALUE_FLAGS = new Set([
   ...ARTIFACT_FLAGS.keys(),
 ]);
 
-export function usage() {
+function overviewUsage() {
   return `Usage:
-  provenex-check demo
-  provenex-check plan [path]
-  provenex-check capabilities
-  provenex-check explain <artifact.json> [--signer-key KEY]
-  provenex-check coverage [--gateway-url ORIGIN]
-  provenex-check brief [--gateway-url ORIGIN] [--format text|json]
-  provenex-check scan [path] [options]
-  provenex-check audit [path] [options]
+  provenex-check <command> [options]
 
-demo renders one built-in Brightcart result without reading files or calling a service.
-plan inventories local evidence surfaces without uploading.
-capabilities lists what each consented surface unlocks.
-explain reads a signed Provenex decision artifact you already hold (a
-checkpoint result, gateway decision, Engine assessment, or signed verdict),
-renders what it establishes and what it does not, and checks the Ed25519
-signature when --signer-key provides the issuer's 32-byte public key (hex or
-base64). Fully offline; nothing is uploaded.
-coverage asks YOUR Provenex App gateway (never the hosted engine) what it can
-prove about your workspace right now and renders it verbatim: connected is
-credentials, not coverage, and absent areas are "not evaluated", never safe.
-brief asks that same gateway for a server-authored, prioritized owner brief.
-The default is plain text; --format json prints the strict, bounded brief DTO
-to stdout for an agent. The public CLI does not decide which actions matter.
-The workload key is read from PROVENEX_SDK_KEY; keys are never CLI arguments.
-scan and audit collect a bounded, consented dataset and send it to the hosted
-Provenex API. No analysis engine is bundled or downloaded.
+Local Check - collector and hosted-analysis client. No App gateway.
+  demo              Built-in Brightcart result; no files, no network, no key
+  plan [path]       Inventory local evidence; no upload
+  capabilities      What each consented surface unlocks
+  scan [path]       Bounded source check (start with --dry-run)
+  audit [path]      Scan plus runtime/cost exports
+
+Your App gateway - tenant workload key; never the hosted Check API.
+  coverage          What the gateway can prove about the workspace now
+  brief             Server-authored owner brief (text or --format json)
+  explain <file>    Offline signed-artifact explanation
+
+Run provenex-check <command> --help for command options.
+Node.js 22+. Production uploads use PROVENEX_API_KEY or ~/.config/provenex/check.json.
+Keys are never command-line arguments.`;
+}
+
+function scanUsage(command) {
+  return `Usage:
+  provenex-check ${command} [path] [options]
+
+${command} collects a bounded, consented dataset and sends it to the hosted
+Provenex API. No analysis engine is bundled or downloaded. Start with --dry-run.
 
 Options:
   --api-url URL              Loopback development override only; production is
                              pinned to https://api.provenex.ai
-  --gateway-url URL          Provenex App gateway for coverage or brief; may be
-                             set once with PROVENEX_APP_GATEWAY_URL
-  --format text|json         Brief output (default text; JSON goes to stdout)
   --session-input PATH       Add session JSONL or conversations.json (repeatable)
-  --telemetry PATH           Add runtime traces (OTLP JSON by default; repeatable)
-  --telemetry-format FORMAT  Format for --telemetry (default otel; also langfuse,
+  --telemetry PATH           Add runtime traces (repeatable). Format is sniffed;
+                             unrecognized JSON is refused unless --telemetry-format
+                             is set. Native Langfuse JSON and LangSmith REST runs
+                             ingest as otel.
+  --telemetry-format FORMAT  Explicit format for --telemetry (otel, langfuse,
                              langsmith, langchain, chatgpt, okta, bedrock, m365,
                              anthropic, gws, github, salesforce, slack, mcp,
                              shopify, data-activity). github is org/enterprise
-                             audit-log JSON, not Actions job logs. Native
-                             Langfuse JSON and LangSmith REST runs ingest as otel.
-  --fly-log PATH             Add a Fly log export (repeatable)
-  --cloudwatch-log PATH      Add a CloudWatch log export (repeatable)
-  --aws-input PATH           Add an AWS cost/usage export (repeatable)
+                             audit-log JSON, not Actions job logs.
+  --fly-log PATH             Add a Fly log export (repeatable; audit only)
+  --cloudwatch-log PATH      Add a CloudWatch log export (repeatable; audit only)
+  --aws-input PATH           Add an AWS cost/usage export (repeatable; audit only)
   --dependency-audit PATH    Add an npm/pnpm/cargo/pip/OSV audit (repeatable)
   --exclude PATTERN          Exclude a relative path/glob locally (repeatable)
-  --discover-ai-history      Find sessions whose first metadata-record cwd
-                             exactly matches the scan root (Claude/Codex only)
+  --discover-ai-history      Include exact-project Claude, Codex, or Cursor
+                             sessions. Cursor matches the project-slug transcript
+                             directory; Claude/Codex match first-record cwd.
+                             Matching tool paths can join to submitted files;
+                             unmatched stay unjoined.
   --no-prompt                Skip guided AI metadata discovery and the optional
                              file offer (implied by --yes)
   --json PATH                Write the full validated public API response
   --html PATH                Write a locally rendered HTML report
+  --md PATH                  Write a locally rendered Markdown report
   --verify-against PATH      Compare this scan with a prior signed Check JSON
                              locally; never sends the prior report or its path
   --list-files               List every selected source-relative path locally
@@ -100,10 +103,10 @@ Options:
   --yes                      Approve the displayed upload non-interactively
                              without discovering or including AI history
   --force                    Replace existing regular report files
-  --max-files N              Source-file limit (default 5000, max 10000)
-  --max-file-bytes N         Per-file limit (default 1048576, max 4194304)
-  --max-artifact-bytes N     Per-artifact limit (default 16777216, max 67108864)
-  --max-total-bytes N        Aggregate limit (default/max 67108864)
+  --max-files N              Source-file limit (default ${DEFAULT_LIMITS.maxFiles}, max ${SERVER_LIMITS.maxSourceFiles})
+  --max-file-bytes N         Per-file limit (default ${DEFAULT_LIMITS.maxFileBytes}, max ${SERVER_LIMITS.maxSourceFileBytes})
+  --max-artifact-bytes N     Per-artifact limit (default ${DEFAULT_LIMITS.maxArtifactBytes}, max ${SERVER_LIMITS.maxArtifactBytes})
+  --max-total-bytes N        Aggregate limit (default/max ${DEFAULT_LIMITS.maxTotalBytes})
   --help                     Show this help
   --version                  Show the version
 
@@ -113,11 +116,64 @@ $XDG_CONFIG_HOME/provenex/check.json). Loopback development endpoints read
 only PROVENEX_CHECK_DEV_API_KEY and never fall back to a production key/config.
 PROVENEX_CHECK_API_URL follows the same loopback-only override rule as
 --api-url; arbitrary remote origins are rejected before any key is read.
-Known Provenex, Codex, and Claude credential stores are always excluded from
-collection. Known Claude/Codex AI-history roots and conversations.json exports
-are never swept as ordinary source. Their local paths are not displayed or
-uploaded; use the explicit AI-history options to consent to session evidence.
-Scanning the canonical home directory is refused; select a project subtree.`;
+Known Provenex, Codex, Claude, and Cursor credential/history stores are always
+excluded from collection. Claude/Codex/Cursor AI-history roots and
+conversations.json exports are never swept as ordinary source. Their local
+paths are not displayed or uploaded; use the explicit AI-history options to
+consent to session evidence. Scanning the canonical home directory is refused;
+select a project subtree.`;
+}
+
+export function usage(command) {
+  if (command === 'scan' || command === 'audit') return scanUsage(command);
+  if (command === 'plan') {
+    return `Usage:
+  provenex-check plan [path]
+
+Inventories local evidence surfaces without uploading or reading an API key.
+Reports languages, CI, agent/MCP config, exact-project Claude/Codex/Cursor
+session counts (filenames omitted), and obvious trace-export filenames.
+Warns when the tree looks larger than the default scan file limit.`;
+  }
+  if (command === 'demo') {
+    return `Usage:
+  provenex-check demo
+
+Renders one built-in Brightcart result. No project files, no network, no key.`;
+  }
+  if (command === 'capabilities') {
+    return `Usage:
+  provenex-check capabilities
+
+Lists what each consented evidence surface unlocks. Analysis stays hosted.`;
+  }
+  if (command === 'explain') {
+    return `Usage:
+  provenex-check explain <artifact.json> [--signer-key KEY]
+
+Reads a signed Provenex decision artifact you already hold (a checkpoint
+result, gateway decision, Engine assessment, or signed verdict). Renders what
+it establishes and what it does not. --signer-key is the issuer's 32-byte
+Ed25519 public key (hex or base64). Fully offline; nothing is uploaded.`;
+  }
+  if (command === 'coverage') {
+    return `Usage:
+  provenex-check coverage [--gateway-url ORIGIN]
+
+Asks YOUR Provenex App gateway (never the hosted engine) what it can prove
+about the workspace right now. Connected is credentials, not coverage; absent
+areas are "not evaluated", never safe. Set PROVENEX_APP_GATEWAY_URL or pass
+--gateway-url. The workload key is PROVENEX_SDK_KEY; keys are never argv.`;
+  }
+  if (command === 'brief') {
+    return `Usage:
+  provenex-check brief [--gateway-url ORIGIN] [--format text|json]
+
+Asks YOUR Provenex App gateway for a server-authored owner brief. Default is
+plain text; --format json prints the bounded DTO to stdout. The public CLI
+does not decide which actions matter. PROVENEX_SDK_KEY; keys are never argv.`;
+  }
+  return overviewUsage();
 }
 
 const TELEMETRY_FORMATS = new Set([
@@ -183,18 +239,14 @@ export function parseArgs(argv, env = process.env) {
     force: false,
     telemetryFormat: 'otel',
     telemetryFormatExplicit: false,
-    limits: {
-      maxFiles: 5000,
-      maxFileBytes: 1_048_576,
-      maxArtifactBytes: 16_777_216,
-      maxTotalBytes: 67_108_864,
-    },
+    limits: { ...DEFAULT_LIMITS },
   };
   const positionals = [];
   const seenFlags = new Set();
 
   for (let index = argumentStart; index < argv.length; index += 1) {
     const raw = argv[index];
+    if (raw === '-h' || raw === '--help') return { help: true, command };
     if (!raw.startsWith('--')) {
       positionals.push(raw);
       continue;
@@ -203,7 +255,6 @@ export function parseArgs(argv, env = process.env) {
     const flag = equals === -1 ? raw : raw.slice(0, equals);
     const inlineValue = equals === -1 ? undefined : raw.slice(equals + 1);
 
-    if (flag === '--help') return { help: true };
     if (flag === '--version') return { version: true };
     if (flag === '--dry-run' || flag === '--yes' || flag === '--force' || flag === '--discover-ai-history' || flag === '--no-prompt' || flag === '--list-files') {
       if (inlineValue !== undefined) throw new UsageError(`${flag} does not take a value`);
@@ -231,6 +282,8 @@ export function parseArgs(argv, env = process.env) {
       options.outputs.json = taken.value;
     } else if (flag === '--html') {
       options.outputs.html = taken.value;
+    } else if (flag === '--md') {
+      options.outputs.md = taken.value;
     } else if (flag === '--signer-key') {
       options.signerKey = taken.value;
     } else if (flag === '--gateway-url') {
@@ -320,6 +373,7 @@ export function parseArgs(argv, env = process.env) {
       || options.discoverAiHistory
       || options.outputs.json
       || options.outputs.html
+      || options.outputs.md
       || options.verifyAgainst
       || options.requestTimeoutMs !== null
       || options.listFiles
@@ -341,6 +395,7 @@ export function parseArgs(argv, env = process.env) {
       || options.discoverAiHistory
       || options.outputs.json
       || options.outputs.html
+      || options.outputs.md
       || options.verifyAgainst
       || options.requestTimeoutMs !== null
       || options.listFiles

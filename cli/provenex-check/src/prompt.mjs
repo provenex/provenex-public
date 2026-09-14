@@ -1,6 +1,7 @@
 import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
+import { UsageError } from './errors.mjs';
 
 const PEEK_BYTES = 256 * 1024;
 const OTEL_FAMILY = new Set(['', 'otel', 'otlp', 'otel-genai', 'langfuse', 'langsmith', 'langchain']);
@@ -33,6 +34,7 @@ export const EVIDENCE_CATALOG = `Other evidence Provenex can join with this proj
   audit command only       Fly, CloudWatch, or AWS cost export
 
 Cursor databases, browser profiles, and login stores are never accepted.
+Unrecognized JSON is not selected; use a supported export or --telemetry-format.
 Enter one local file at a time. An empty path continues to the upload preflight.
 `;
 
@@ -137,9 +139,8 @@ export function classifyEvidencePath(filePath, text, { command = 'scan' } = {}) 
     };
   }
   return {
-    kind: 'telemetry',
-    format: 'otel',
-    note: 'Unrecognized JSON; sending as runtime telemetry (OTLP/JSON). Prefer Langfuse, LangSmith, OTLP, or GitHub audit-log JSON.',
+    skip: true,
+    note: 'Unrecognized JSON; not selected. Use a supported export, or --telemetry PATH with --telemetry-format.',
   };
 }
 
@@ -152,12 +153,12 @@ export async function offerEvidence(options, {
   const matches = Array.isArray(aiHistoryDiscovery.matches) ? aiHistoryDiscovery.matches : [];
   if (aiHistoryDiscovery.status === 'found') {
     const count = matches.length;
-    writeln(`Local AI history: found ${count} Claude/Codex session${count === 1 ? '' : 's'} for this exact project.`);
+    writeln(`Local AI history: found ${count} Claude/Codex/Cursor session${count === 1 ? '' : 's'} for this exact project.`);
     if (options.discoverAiHistory) {
       writeln('Inclusion was explicitly requested with --discover-ai-history.');
     } else {
       const answer = String(await question(
-        `Review ${count === 1 ? 'it' : 'them'} alongside this project scan? This version does not yet join a session action to a source path. Full session contents are sent only after the upload preflight and approval. [Y/n] `,
+        `Review ${count === 1 ? 'it' : 'them'} alongside this project scan? Matching session tool paths can be joined to submitted files; unmatched session actions stay unjoined. Full session contents are sent only after the upload preflight and approval. [Y/n] `,
       )).trim();
       options.discoverAiHistory = answer === '' || /^y(es)?$/i.test(answer);
       if (!options.discoverAiHistory) {
@@ -228,10 +229,26 @@ export async function applyTelemetryFormats(options, { peekFile = peekUtf8 } = {
     try {
       text = await peekFile(path.resolve(artifact.path));
     } catch {
-      artifact.format = artifact.format || options.telemetryFormat || 'otel';
+      if (locked) {
+        artifact.format = options.telemetryFormat;
+        continue;
+      }
+      throw new UsageError(
+        'could not read telemetry to detect format; pass --telemetry-format with a supported format',
+      );
+    }
+    const sniffed = sniffTelemetryFormat(text);
+    if (sniffed) {
+      artifact.format = sniffed;
       continue;
     }
-    artifact.format = sniffTelemetryFormat(text) || artifact.format || options.telemetryFormat || 'otel';
+    if (locked) {
+      artifact.format = options.telemetryFormat;
+      continue;
+    }
+    throw new UsageError(
+      'unrecognized telemetry JSON; pass --telemetry-format with a supported format',
+    );
   }
   return options;
 }

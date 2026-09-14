@@ -84,26 +84,29 @@ zero-finding source scan never implies that runtime, identity, data, spend, or
 agent behavior was evaluated.
 
 On an interactive TTY, local AI-history activation starts with bounded,
-metadata-only discovery. The CLI reports whether exact-project Claude/Codex
+metadata-only discovery. The CLI reports whether exact-project Claude/Codex/Cursor
 sessions were `found`, whether there were `none`, or whether discovery was
 `unavailable`. For found matches it asks once, with a default of yes, whether
-to include the full session files for an unjoined review alongside the project
-scan. This version does not yet connect a session action to a source path. The
-user can decline, and the generic evidence-file catalog appears only after a
-separate default-no question. Non-interactive runs, `--yes`, and `--no-prompt`
-skip this guided discovery and cannot include AI history without the explicit
-`--discover-ai-history` flag. `--yes` is upload approval, not AI-history
-consent.
+to include the full session files alongside the project scan. Matching session
+tool paths can be joined to submitted files. Unmatched session actions stay
+unjoined. The join is path identity: it does not establish authorship, tool
+success, or human review. The user can decline, and the generic evidence-file
+catalog appears only after a separate default-no question. Non-interactive runs,
+`--yes`, and `--no-prompt` skip this guided discovery and cannot include AI
+history without the explicit `--discover-ai-history` flag. `--yes` is upload
+approval, not AI-history consent.
 
 The metadata pass examines only the first complete JSONL record for each
 Claude Code or Codex candidate, with a 64 KiB per-record bound and 32 MiB
 aggregate metadata cap. It selects a session only when that first record's
-provider-specific `cwd` exactly matches the canonical scan root. Missing,
-malformed, or oversized first records are skipped, later records cannot turn a
-candidate into a match, and discovered filenames are not displayed or
-uploaded. Explicit and discovered inputs share the 256-artifact and 64 MiB
-aggregate request bounds; exceeding either remains a fail-closed error rather
-than silently omitting sessions.
+provider-specific `cwd` exactly matches the canonical scan root. Cursor matches
+by the project-slug `agent-transcripts` directory for this scan root; every
+`.jsonl` under that tree is an exact-project candidate, and `state.vscdb`
+remains refused. Missing, malformed, or oversized first records are skipped,
+later records cannot turn a Claude/Codex candidate into a match, and discovered
+filenames are not displayed or uploaded. Explicit and discovered inputs share
+the 256-artifact and 64 MiB aggregate request bounds; exceeding either remains
+a fail-closed error rather than silently omitting sessions.
 
 Any case variant of the `conversations.json` basename is never swept into
 ordinary source or configuration during a broad scan. A supported ChatGPT or
@@ -122,8 +125,10 @@ advisory observations; it leads with â€œno joined business risk was evaluated,â€
 shows at most three clues, and asks for one highest-value next input.
 `report_mode=joined` leads with business impact,
 then separates Observed, Inferred, and Not established claims before the
-technical details. The complete validated DTO is saved only when the user
-requests a local `--json` output.
+technical details. A session-to-source path-identity join can also set
+`report_mode=joined`. That join names a submitted file; it does not establish
+authorship, tool success, or human review. The complete validated DTO is saved
+only when the user requests a local `--json` output.
 
 `scan --verify-against PRIOR.json` is the local re-run loop. The prior file
 must be owner-only, regular, signed Check JSON for the same target. It and its
@@ -237,9 +242,9 @@ server must still emulate the exact v1 applied retention policy; the client
 rejects a missing or different declaration.
 
 The canonical home directory is refused as a scan root; the user must select a
-project subtree. Known Provenex, Codex, and Claude credential stores are always
+project subtree. Known Provenex, Codex, Claude, and Cursor credential stores are always
 excluded before source selection when they lie under a broader eligible target
-and cannot be selected explicitly as artifacts. Known Claude/Codex AI-history
+and cannot be selected explicitly as artifacts. Known Claude/Codex/Cursor AI-history
 roots are pruned from generic source traversal, leaving explicit selection or
 bounded `--discover-ai-history` as the consent routes. Files beneath those
 roots require `--session-input` and cannot be relabeled with another artifact

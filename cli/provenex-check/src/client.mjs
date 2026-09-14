@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 import { TextDecoder } from 'node:util';
 import { VERSION } from './args.mjs';
 import { UsageError } from './errors.mjs';
+import { assertOwnerRestrictedFile } from './fs-policy.mjs';
 import { validateHostedResponse } from './report.mjs';
 
 const MAX_CONFIG_BYTES = 64 * 1024;
@@ -85,12 +86,9 @@ export async function loadApiKey(origin) {
     const info = await handle.stat();
     if (!info.isFile()) throw new UsageError('API key config must be a regular file');
     if (info.size > MAX_CONFIG_BYTES) throw new UsageError('API key config is unexpectedly large');
-    if (process.platform !== 'win32') {
-      if ((info.mode & 0o077) !== 0) throw new UsageError('API key config must be owner-only (chmod 600)');
-      if (typeof process.getuid === 'function' && info.uid !== process.getuid()) {
-        throw new UsageError('API key config must be owned by the current user');
-      }
-    }
+    assertOwnerRestrictedFile(info, file, (detail) => {
+      throw new UsageError(`API key config ${detail}`);
+    });
     serialized = await handle.readFile('utf8');
   } finally {
     await handle.close();

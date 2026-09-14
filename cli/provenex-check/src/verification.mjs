@@ -4,6 +4,7 @@ import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { CLIENT_LIMITS } from './client.mjs';
 import { UsageError } from './errors.mjs';
+import { assertOwnerRestrictedFile } from './fs-policy.mjs';
 import { validateHostedResponse } from './report.mjs';
 
 export const LOCAL_VERIFICATION_VERSION = 'provenex-check-local-verification.v1';
@@ -76,12 +77,7 @@ export async function loadPriorResponse(file, expected) {
     if (info.size > CLIENT_LIMITS.maxResponseBytes) {
       failPrior(`exceeds ${CLIENT_LIMITS.maxResponseBytes} bytes`);
     }
-    if (process.platform !== 'win32') {
-      if ((info.mode & 0o077) !== 0) failPrior('must be owner-only (chmod 600)');
-      if (typeof process.getuid === 'function' && info.uid !== process.getuid()) {
-        failPrior('must be owned by the current user');
-      }
-    }
+    assertOwnerRestrictedFile(info, file, failPrior);
     serialized = await handle.readFile('utf8');
   } finally {
     await handle.close();

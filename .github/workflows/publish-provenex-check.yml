@@ -6,7 +6,7 @@ on:
       - "provenex-check-v*"
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -47,3 +47,12 @@ jobs:
       - name: Publish with npm trusted publishing
         working-directory: cli/provenex-check
         run: npm publish --access public --tag latest
+      - name: Create the matching GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p "require('./cli/provenex-check/package.json').version")"
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "@provenex/check ${version}" \
+            --notes "Published to npm as [@provenex/check@${version}](https://www.npmjs.com/package/@provenex/check/v/${version}). See CHANGELOG.md."

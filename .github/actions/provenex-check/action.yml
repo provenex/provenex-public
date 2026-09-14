@@ -1,0 +1,48 @@
+name: Provenex Check
+description: Run a consent-first Provenex Check dry-run or hosted scan. A dry-run is not an all-clear security gate.
+inputs:
+  path:
+    description: Project directory to scan
+    default: "."
+  version:
+    description: npm version or dist-tag of @provenex/check
+    default: "0.1.0-alpha.7"
+  dry-run:
+    description: If true, print the preflight and upload nothing
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 22
+    - name: Run Provenex Check
+      shell: bash
+      env:
+        PROVENEX_API_KEY: ${{ env.PROVENEX_API_KEY }}
+        CHECK_PATH: ${{ inputs.path }}
+        CHECK_VERSION: ${{ inputs.version }}
+        CHECK_DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -euo pipefail
+        if [[ ! "$CHECK_VERSION" =~ ^[0-9A-Za-z._-]+$ ]]; then
+          echo "invalid @provenex/check version" >&2
+          exit 2
+        fi
+        {
+          echo "## Provenex Check"
+          echo
+          if [ "$CHECK_DRY_RUN" = "true" ]; then
+            echo "Dry-run preflight. This is not a merge all-clear."
+            echo
+            npx --yes "@provenex/check@${CHECK_VERSION}" scan "$CHECK_PATH" --dry-run --no-prompt
+          else
+            if [ -z "${PROVENEX_API_KEY:-}" ]; then
+              echo "hosted scan requires PROVENEX_API_KEY in the job environment" >&2
+              exit 2
+            fi
+            echo "Hosted scan. Absence of a finding is not a fix."
+            echo
+            npx --yes "@provenex/check@${CHECK_VERSION}" scan "$CHECK_PATH" --yes --no-prompt
+          fi
+        } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"

@@ -205,6 +205,143 @@ export function renderTerminal(response, { verification = null } = {}) {
   return `${lines.join('\n')}\n`;
 }
 
+function markdownList(lines, label, values) {
+  if (!values.length) return;
+  lines.push('', `**${label}**`);
+  values.forEach((value) => lines.push(`- ${value}`));
+}
+
+function renderVerificationMarkdown(verification) {
+  if (!verification) return [];
+  const lines = ['', '## Verification against the prior signed report'];
+  if (!verification.findings.length) {
+    lines.push('The prior report had no findings to compare.');
+  } else {
+    for (const item of verification.findings) {
+      lines.push(`- **${item.headline}:** \`${item.outcome}\``, `  ${item.reason}`);
+    }
+  }
+  lines.push('', 'A missing prior key remains not verifiable until the signed report proves that exact candidate was evaluated again.');
+  return lines;
+}
+
+function renderSourcePreviewMarkdown(response, verification) {
+  const report = response.signed_report.report;
+  const clues = ownerVisibleFindings(report).slice(0, 3);
+  const next = strongestNextEvidence(report);
+  const lines = [
+    '# Evidence preview: no joined business risk was evaluated',
+    '',
+    `- Target: ${report.target}`,
+    `- Generated: ${report.generated_at}`,
+    `- Status: ${report.status.toUpperCase()}`,
+    '',
+    clues.length
+      ? `## Evidence clues (showing ${clues.length} of ${report.findings.length})`
+      : 'No evidence clues were emitted.',
+  ];
+  for (const finding of clues) {
+    lines.push('', `### ${finding.owner_view.headline}`, '', finding.consequence);
+    markdownList(lines, 'Observed', finding.owner_view.observed);
+    markdownList(lines, 'Inferred', finding.owner_view.inferred);
+    markdownList(lines, 'Not established', finding.owner_view.not_established);
+  }
+  const incomplete = incompleteCoverageGap(report);
+  if (incomplete) {
+    lines.push('', '## One coverage gap in this incomplete run', '', incomplete);
+  }
+  if (next) {
+    lines.push(
+      '',
+      '## One input that would most improve the answer',
+      '',
+      `- **${titleCase(next.surface)}:** ${next.why}`,
+      `  How: ${next.how}`,
+    );
+  }
+  lines.push(...renderVerificationMarkdown(verification));
+  const promptFinding = clues.find((finding) => finding.owner_view.verification_key !== null);
+  if (promptFinding) {
+    lines.push(
+      '',
+      `## ${CODING_AGENT_PROMPT_LABEL}`,
+      '',
+      '```',
+      buildCodingAgentFixPrompt(promptFinding, report),
+      '```',
+    );
+  }
+  lines.push('', 'Use `--json` on a run to save the complete validated response.');
+  return `${lines.join('\n')}\n`;
+}
+
+export function renderMarkdown(response, { verification = null } = {}) {
+  const report = response.signed_report.report;
+  if (report.report_mode === 'source_preview') {
+    return renderSourcePreviewMarkdown(response, verification);
+  }
+
+  const lines = [
+    `# Provenex Check: ${report.status.toUpperCase()}`,
+    '',
+    `- Target: ${report.target}`,
+    `- Generated: ${report.generated_at}`,
+    '',
+    '## What could affect your business',
+  ];
+  const visibleFindings = ownerVisibleFindings(report).slice(0, 5);
+  const promptFinding = visibleFindings.find(
+    (finding) => finding.owner_view.verification_key !== null,
+  );
+  if (!report.findings.length) {
+    lines.push('', 'No findings were emitted for the joined evidence and coverage shown below.');
+  } else {
+    for (const finding of visibleFindings) {
+      const owner = finding.owner_view;
+      lines.push('', `### ${owner.headline}`, '', finding.consequence, '', `Evidence joined: ${owner.join}`);
+      markdownList(lines, 'Observed', owner.observed);
+      markdownList(lines, 'Inferred', owner.inferred);
+      markdownList(lines, 'Not established', owner.not_established);
+      lines.push('', `**Fix goal:** ${owner.remediation.goal}`);
+      owner.remediation.changes.forEach((change) => lines.push(`- ${change}`));
+      lines.push('', `Details: ${titleCase(owner.impact_lane)} · ${titleCase(finding.evidence_level)} evidence · ${titleCase(finding.disposition)}`);
+    }
+    if (visibleFindings.length < report.findings.length) {
+      lines.push('', `Showing ${visibleFindings.length} of ${report.findings.length} findings. Use \`--json\` to save the complete validated response.`);
+    }
+  }
+
+  lines.push(...renderVerificationMarkdown(verification));
+
+  if (promptFinding) {
+    lines.push(
+      '',
+      `## ${CODING_AGENT_PROMPT_LABEL}`,
+      '',
+      '```',
+      buildCodingAgentFixPrompt(promptFinding, report),
+      '```',
+    );
+  }
+
+  lines.push('', '## Coverage');
+  for (const coverage of report.coverage) {
+    lines.push(`- **${titleCase(coverage.category)}:** ${titleCase(coverage.status)}. ${coverage.detail}`);
+  }
+  if (!report.coverage.length) lines.push('- No coverage records were emitted.');
+  const next = strongestNextEvidence(report);
+  if (next) {
+    lines.push(
+      '',
+      '## Next evidence',
+      '',
+      `- **${titleCase(next.surface)}:** ${next.why}`,
+      `  How: ${next.how}`,
+    );
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 function htmlFactList(label, values) {
   if (!values.length) return '';
   return `<div class="facts"><h4>${escapeHtml(label)}</h4><ul>${values.map((value) => `<li>${escapeHtml(value)}</li>`).join('')}</ul></div>`;

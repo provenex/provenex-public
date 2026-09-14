@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   APP_CHECKPOINT_SCHEMA_VERSION,
@@ -318,7 +319,7 @@ test("the CLI never loads the checkpoint module", async () => {
   // must not pull in the collector.
   const { readFile, readdir } = await import("node:fs/promises");
   const { join } = await import("node:path");
-  const srcDir = new URL("../src/", import.meta.url).pathname;
+  const srcDir = fileURLToPath(new URL("../src/", import.meta.url));
   for (const file of await readdir(srcDir)) {
     if (file === "checkpoint.mjs") continue;
     const body = await readFile(join(srcDir, file), "utf8");

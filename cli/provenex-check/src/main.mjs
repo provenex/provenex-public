@@ -25,7 +25,7 @@ import { prepareOutputs, writeReports } from './output.mjs';
 import { UsageError } from './errors.mjs';
 import { SERVER_LIMITS } from './limits.mjs';
 import { CHECK_DATA_POLICY } from './policy.mjs';
-import { renderHtml, renderTerminal } from './render.mjs';
+import { renderHtml, renderMarkdown, renderTerminal } from './render.mjs';
 import { renderCapabilities, renderDemo, renderPlan } from './plan.mjs';
 import { applyTelemetryFormats, offerEvidence, shouldOfferEvidence } from './prompt.mjs';
 import {
@@ -71,7 +71,7 @@ function renderPreflight({ origin, command, target, dataset, outputs, aiHistoryR
     `Artifacts: ${dataset.artifacts.length} (${formatBytes(dataset.artifactBytes)} bytes)`,
     aiHistoryRequested
       ? `AI history: requested; ${dataset.discoveredSessionCount} exact-cwd matches (${formatBytes(dataset.discoveredSessionBytes)} bytes)`
-      : 'AI history: not requested (add --discover-ai-history for an independent session review)',
+      : 'AI history: not requested (add --discover-ai-history to include exact-project sessions)',
     `Total upload content: ${formatBytes(dataset.totalBytes)} bytes`,
     `Categories: ${dataset.categories.length ? dataset.categories.join(', ') : '(none)'}`,
     `High-sensitivity categories: ${sensitive.length ? sensitive.join(', ') : '(none)'}`,
@@ -95,6 +95,7 @@ function renderPreflight({ origin, command, target, dataset, outputs, aiHistoryR
       : 'Explicit artifact inputs selected: (none)',
     ...(outputs.json ? [`JSON output: ${quoteLocal(outputs.json)}`] : []),
     ...(outputs.html ? [`HTML output: ${quoteLocal(outputs.html)}`] : []),
+    ...(outputs.md ? [`Markdown output: ${quoteLocal(outputs.md)}`] : []),
     `Policy: ${CHECK_DATA_POLICY.policy_id}; raw ${CHECK_DATA_POLICY.raw_evidence_retention_seconds}s; derived ${CHECK_DATA_POLICY.derived_results_retention_seconds}s; ${CHECK_DATA_POLICY.policy_url}`,
     ...(localDevelopment
       ? [
@@ -154,7 +155,7 @@ function assertActiveBearerAbsent(dataset, apiKey) {
 export async function main(argv) {
   const options = parseArgs(argv);
   if (options.help) {
-    stdout.write(`${usage()}\n`);
+    stdout.write(`${usage(options.command)}\n`);
     return 0;
   }
   if (options.version) {
@@ -235,6 +236,7 @@ export async function main(argv) {
     protectedDirectories: [
       path.join(localHome, '.claude', 'projects'),
       path.join(localHome, '.codex', 'sessions'),
+      path.join(localHome, '.cursor', 'projects'),
     ],
     limits: options.limits,
   });
@@ -283,7 +285,8 @@ export async function main(argv) {
   const verification = priorResponse ? comparePriorResponse(priorResponse, response) : null;
   const terminal = renderTerminal(response, { verification });
   const html = preparedOutputs.html ? renderHtml(response, { verification }) : null;
-  const written = await writeReports(preparedOutputs, response, html, options.force);
+  const markdown = preparedOutputs.md ? renderMarkdown(response, { verification }) : null;
+  const written = await writeReports(preparedOutputs, response, html, markdown, options.force);
   stdout.write(terminal);
   for (const destination of written) stdout.write(`Wrote ${quoteLocal(destination)}\n`);
   return response.exit_code;

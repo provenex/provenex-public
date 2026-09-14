@@ -27,6 +27,7 @@
     "types/",
     "schemas/",
     "openapi/",
+    "skills/",
     "README.md",
     "LICENSE",
     "NOTICE"

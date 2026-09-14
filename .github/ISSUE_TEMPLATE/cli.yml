@@ -1,0 +1,29 @@
+name: Public CLI
+description: A bug or docs problem in the Provenex Check CLI
+title: "[cli] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include API keys, customer telemetry, private reports, or
+        exploit payloads. Use SECURITY.md for those.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Commands you ran, what you expected, and what you saw.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "@provenex/check version"
+      placeholder: 0.1.0-alpha.7
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: 22

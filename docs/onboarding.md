@@ -28,7 +28,8 @@ npx @provenex/check scan /path/to/project --dry-run
 
 These commands do not need a production API key. `demo` renders the fixed
 Brightcart result without reading project files or making a request. `plan`
-inventories recognized project and evidence surfaces. `capabilities` explains
+inventories recognized project and evidence surfaces and warns when the tree
+looks larger than the default 5,000-file scan cap. `capabilities` explains
 which inputs make each public result surface evaluable. `--dry-run` reads the
 eligible selection and prints the full upload preflight without making a request.
 
@@ -53,7 +54,8 @@ export PROVENEX_API_KEY='replace-with-your-key'
 
 npx @provenex/check scan /path/to/project \
   --json "$HOME/provenex-reports/check.json" \
-  --html "$HOME/provenex-reports/check.html"
+  --html "$HOME/provenex-reports/check.html" \
+  --md "$HOME/provenex-reports/check.md"
 ```
 
 The production CLI accepts the key from `PROVENEX_API_KEY` or an owner-only
@@ -63,7 +65,7 @@ arguments. The CLI pins production uploads to `https://api.provenex.ai`.
 Interactive runs show the final preflight and ask for approval. Automation must
 add `--yes`; that flag approves the displayed upload only. It does not authorize
 AI-history discovery. Use `--discover-ai-history` explicitly when automation
-should include exact-project Claude Code or Codex sessions.
+should include exact-project Claude Code, Codex, or Cursor sessions.
 
 ## 3. Add evidence deliberately
 
@@ -96,7 +98,7 @@ selection and supported session/export shapes are documented in the
 [CLI reference](../cli/provenex-check/README.md).
 
 On an interactive terminal, `scan` and `audit` may perform bounded metadata-only
-discovery for exact-project Claude Code and Codex sessions. The CLI reports
+discovery for exact-project Claude Code, Codex, and Cursor sessions. The CLI reports
 `found`, `none`, or `unavailable` and asks before including any full session.
 Declining includes none. Non-interactive runs do not discover or include that
 history unless `--discover-ai-history` is present.
@@ -107,7 +109,11 @@ The report separates what was observed, what was inferred, and what was not
 established. A source-only run is labeled as source-bounded. Runtime, identity,
 cost, deployment, and agent behavior that were not supplied remain unevaluated.
 
-JSON and HTML files are written only when requested. They are local,
+When approved session history is included, a structured tool call that names a
+submitted file can appear as a path-identity join. That is not proof the agent
+wrote the current bytes. Sessions that name no submitted file stay unjoined.
+
+JSON, HTML, and Markdown files are written only when requested. They are local,
 user-controlled copies outside the hosted application's ephemeral processing
 policy. Keep them outside the scanned project and protect them as private
 reports.
@@ -115,6 +121,10 @@ reports.
 The response signature verifies envelope self-consistency with the public key
 included in that same response. It is not a durable Provenex issuer identity.
 See [key and verification semantics](key-management.md).
+
+A GitHub Actions dry-run is available as
+[`provenex/provenex-public/.github/actions/provenex-check`](https://github.com/provenex/provenex-public/blob/main/.github/actions/provenex-check/action.yml).
+It prints the preflight and is not a merge all-clear.
 
 ## 5. Re-run after a change
 

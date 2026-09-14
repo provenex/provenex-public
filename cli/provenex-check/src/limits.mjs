@@ -1,3 +1,10 @@
+export const DEFAULT_LIMITS = Object.freeze({
+  maxFiles: 5000,
+  maxFileBytes: 1_048_576,
+  maxArtifactBytes: 16_777_216,
+  maxTotalBytes: 67_108_864,
+});
+
 export const SERVER_LIMITS = Object.freeze({
   maxRequestBytes: 128 * 1024 * 1024,
   maxConsentCategories: 12,
